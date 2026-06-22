@@ -1,26 +1,128 @@
 @import "tailwindcss";
 
+/* ===== Tema "Il Segreto di Argil" — vibe Anonymous / terminale ===== */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: #0a0a0e;
+  --panel: #14141c;
+  --panel-2: #1c1c28;
+  --edge: #2a2a3a;
+  --neon: #22d3ee; /* ciano */
+  --magenta: #c026d3; /* viola */
+  --term: #4ade80; /* verde terminale */
+  --amber: #fbbf24;
+  --text: #e6e6f0;
+  --muted: #8a8aa0;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  /* I font sono iniettati da next/font in layout.tsx */
+  font-family: var(--font-term), "Courier New", monospace;
+  height: 100%;
+  /* niente pull-to-refresh / rimbalzo elastico su mobile */
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  /* texture leggera + vignettatura per dare profondità anche con grafica segnaposto */
+  background-image:
+    radial-gradient(circle at 50% 0%, rgba(34, 211, 238, 0.06), transparent 60%),
+    radial-gradient(circle at 50% 100%, rgba(192, 38, 211, 0.06), transparent 60%);
+  background-attachment: fixed;
+  -webkit-tap-highlight-color: transparent;
+  min-height: 100%;
+  overscroll-behavior: none;
+  /* elimina il ritardo di 300ms sul tap, lasciando pan/zoom dove serve */
+  touch-action: manipulation;
 }
+
+/* Font pixel per i titoli */
+.font-pixel {
+  font-family: var(--font-pixel), var(--font-term), monospace;
+}
+.font-term {
+  font-family: var(--font-term), monospace;
+}
+
+/* ===== Effetti ===== */
+
+/* Scanline CRT sottile su tutta la pagina */
+.scanlines::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0) 0px,
+    rgba(0, 0, 0, 0) 2px,
+    rgba(0, 0, 0, 0.18) 3px,
+    rgba(0, 0, 0, 0) 4px
+  );
+  z-index: 50;
+  opacity: 0.5;
+}
+
+.pixel-border {
+  border: 2px solid var(--edge);
+  box-shadow: 0 0 0 2px var(--bg), 0 6px 0 0 rgba(0, 0, 0, 0.4);
+}
+
+.glow-neon { color: var(--neon); text-shadow: 0 0 6px rgba(34, 211, 238, 0.8), 0 0 14px rgba(34, 211, 238, 0.4); }
+.glow-magenta { color: var(--magenta); text-shadow: 0 0 6px rgba(192, 38, 211, 0.8), 0 0 14px rgba(192, 38, 211, 0.4); }
+
+/* Insegna al neon: lettere accese vs fulminate */
+.neon-on { color: var(--neon); text-shadow: 0 0 6px var(--neon), 0 0 16px rgba(34, 211, 238, 0.7); }
+.neon-off { color: #2b2b38; text-shadow: none; }
+
+@keyframes pop-in {
+  0% { transform: scale(0.6); opacity: 0; }
+  70% { transform: scale(1.08); }
+  100% { transform: scale(1); opacity: 1; }
+}
+.pop-in { animation: pop-in 0.35s ease-out both; }
+
+@keyframes shake {
+  10%, 90% { transform: translateX(-2px); }
+  20%, 80% { transform: translateX(4px); }
+  30%, 50%, 70% { transform: translateX(-6px); }
+  40%, 60% { transform: translateX(6px); }
+}
+.shake { animation: shake 0.4s; }
+
+@keyframes blink { 50% { opacity: 0; } }
+.cursor::after { content: "_"; animation: blink 1s step-end infinite; }
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.5); }
+  50% { box-shadow: 0 0 0 6px rgba(34, 211, 238, 0); }
+}
+.pulse-glow { animation: pulse-glow 1.8s infinite; }
+
+img.pixelated { image-rendering: pixelated; }
+
+.game-look-zone {
+  touch-action: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  overscroll-behavior: contain;
+}
+
+/* Camminata dell'omino (segnaposto): piccolo saltello retro */
+@keyframes walk-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+.walk-bob { animation: walk-bob 0.3s steps(2, end) infinite; }
+
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+.fade-in { animation: fade-in 0.35s ease-out both; }
+
+/* Rivelazione premio: entra dal basso con un piccolo rimbalzo */
+@keyframes rise-in {
+  0% { transform: translateY(14px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+.rise-in { animation: rise-in 0.45s ease-out both; }
