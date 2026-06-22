@@ -82,7 +82,7 @@ export default function BarPortRoyal({ onExit }: { onExit: () => void }) {
   function handleSolved() {
     setOpen(null);
     sfx.reward();
-    completeLevel(1, REWARD_COINS, FRAGMENT);
+    completeLevel(1, REWARD_COINS, FRAGMENT, SOLUTION);
     setPhase("win");
   }
 

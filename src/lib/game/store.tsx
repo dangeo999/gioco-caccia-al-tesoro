@@ -13,6 +13,15 @@ import {
   TOTAL_CHAPTERS,
   completionCodeFor,
 } from "./types";
+import { isSupabaseConfigured } from "@/lib/supabase/client";
+import {
+  bootstrapRemotePlayer,
+  claimRemoteRecoveryPass,
+  completeRemoteChapter,
+  createRemoteRecoveryPass,
+  fetchRemoteState,
+  redeemRemoteChapter,
+} from "./remote";
 
 /**
  * Stato di salvataggio del giocatore.
@@ -24,6 +33,8 @@ import {
 export interface SaveData {
   nickname: string | null;
   playerId: string | null;
+  /** Suffisso breve assegnato dal server: distingue nickname uguali. */
+  publicTag: string | null;
   coins: number;
   fragments: string[]; // glifi/frammenti raccolti livello dopo livello
   completedLevels: number[];
@@ -38,6 +49,7 @@ const STORAGE_KEY = "argil-save-v1";
 const initial: SaveData = {
   nickname: null,
   playerId: null,
+  publicTag: null,
   coins: 0,
   fragments: [],
   completedLevels: [],
@@ -49,9 +61,18 @@ interface GameContextValue extends SaveData {
   /** false finché non abbiamo letto il localStorage (evita flash). */
   ready: boolean;
   register: (nickname: string) => void;
-  completeLevel: (level: number, coins: number, fragment: string) => void;
+  backendStatus: "local" | "connecting" | "online" | "error";
+  completeLevel: (
+    level: number,
+    coins: number,
+    fragment: string,
+    solution?: string,
+  ) => void;
   /** Sblocca un capitolo (chiamato dalla pagina /unlock/<token>). */
   unlockChapter: (id: number) => void;
+  redeemChapter: (token: string, fallbackId?: number) => Promise<boolean>;
+  createRecoveryPass: () => Promise<string>;
+  claimRecoveryPass: (token: string) => Promise<boolean>;
   /** Ripristina un salvataggio (dal "link magico" su un altro telefono). */
   restore: (data: SaveData) => void;
   reset: () => void;
@@ -71,33 +92,71 @@ function genId(): string {
 export function GameProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<SaveData>(initial);
   const [ready, setReady] = useState(false);
+  const [backendStatus, setBackendStatus] = useState<
+    "local" | "connecting" | "online" | "error"
+  >("local");
 
   // Carica il salvataggio al primo mount (solo client).
   useEffect(() => {
+    let loaded: SaveData = { ...initial, unlockedChapters: [...DEFAULT_UNLOCKED] };
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) setData({ ...initial, ...(JSON.parse(raw) as Partial<SaveData>) });
+      if (raw) loaded = { ...initial, ...(JSON.parse(raw) as Partial<SaveData>) };
     } catch {
       /* salvataggio corrotto: si riparte puliti */
     }
+    setData(loaded);
     setReady(true);
+
+    if (isSupabaseConfigured()) {
+      setBackendStatus("connecting");
+      void (async () => {
+        try {
+          const remote = await fetchRemoteState();
+          const synced = remote ?? (loaded.nickname
+            ? await bootstrapRemotePlayer(loaded.nickname)
+            : null);
+          if (synced) setData(synced);
+          setBackendStatus("online");
+        } catch {
+          // Il gioco resta utilizzabile offline finché Auth/schema non sono attivi.
+          setBackendStatus("error");
+        }
+      })();
+    }
   }, []);
 
   // Persiste ogni cambiamento.
   useEffect(() => {
-    if (ready) localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    if (ready) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      } catch {
+        /* Safari privato/storage pieno: il backend resta la fonte primaria. */
+      }
+    }
   }, [data, ready]);
 
   const register = useCallback((nickname: string) => {
+    const clean = nickname.trim().slice(0, 20);
     setData((d) => ({
       ...d,
-      nickname: nickname.trim().slice(0, 20),
+      nickname: clean,
       playerId: d.playerId ?? genId(),
     }));
+    if (isSupabaseConfigured()) {
+      setBackendStatus("connecting");
+      void bootstrapRemotePlayer(clean)
+        .then((remote) => {
+          setData(remote);
+          setBackendStatus("online");
+        })
+        .catch(() => setBackendStatus("error"));
+    }
   }, []);
 
   const completeLevel = useCallback(
-    (level: number, coins: number, fragment: string) => {
+    (level: number, coins: number, fragment: string, solution?: string) => {
       setData((d) => {
         if (d.completedLevels.includes(level)) return d; // niente doppio premio
         const completedLevels = [...d.completedLevels, level];
@@ -115,6 +174,14 @@ export function GameProvider({ children }: { children: ReactNode }) {
           completionCode,
         };
       });
+      if (solution && isSupabaseConfigured()) {
+        void completeRemoteChapter(level, solution, fragment)
+          .then((remote) => {
+            setData(remote);
+            setBackendStatus("online");
+          })
+          .catch(() => setBackendStatus("error"));
+      }
     },
     [],
   );
@@ -127,6 +194,42 @@ export function GameProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
+  const redeemChapter = useCallback(async (token: string, fallbackId?: number) => {
+    if (isSupabaseConfigured()) {
+      try {
+        const remote = await redeemRemoteChapter(token);
+        setData(remote);
+        setBackendStatus("online");
+        return true;
+      } catch {
+        setBackendStatus("error");
+      }
+    }
+    if (!isSupabaseConfigured() && fallbackId) {
+      unlockChapter(fallbackId);
+      return true;
+    }
+    return false;
+  }, [unlockChapter]);
+
+  const createRecoveryPass = useCallback(async () => {
+    if (!isSupabaseConfigured()) throw new Error("Backend non ancora attivo");
+    return createRemoteRecoveryPass();
+  }, []);
+
+  const claimRecoveryPass = useCallback(async (token: string) => {
+    if (!isSupabaseConfigured()) return false;
+    try {
+      const remote = await claimRemoteRecoveryPass(token);
+      setData(remote);
+      setBackendStatus("online");
+      return true;
+    } catch {
+      setBackendStatus("error");
+      return false;
+    }
+  }, []);
+
   const restore = useCallback((incoming: SaveData) => {
     setData({ ...initial, ...incoming });
   }, []);
@@ -137,7 +240,19 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
   return (
     <GameContext.Provider
-      value={{ ...data, ready, register, completeLevel, unlockChapter, restore, reset }}
+      value={{
+        ...data,
+        ready,
+        backendStatus,
+        register,
+        completeLevel,
+        unlockChapter,
+        redeemChapter,
+        createRecoveryPass,
+        claimRecoveryPass,
+        restore,
+        reset,
+      }}
     >
       {children}
     </GameContext.Provider>

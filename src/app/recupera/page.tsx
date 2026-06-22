@@ -12,7 +12,7 @@ import Screen from "@/components/ui/Screen";
  */
 export default function RecuperaPage() {
   const router = useRouter();
-  const { ready, restore } = useGame();
+  const { ready, restore, claimRecoveryPass } = useGame();
   const [status, setStatus] = useState<"loading" | "ok" | "err">("loading");
   const [nick, setNick] = useState<string | null>(null);
 
@@ -20,15 +20,33 @@ export default function RecuperaPage() {
     if (!ready) return;
     const token =
       typeof window !== "undefined" ? window.location.hash.slice(1) : "";
-    const save = token ? decodeSave(decodeURIComponent(token)) : null;
-    if (!save) {
+    if (!token) {
       setStatus("err");
       return;
     }
-    restore(save);
-    setNick(save.nickname);
-    setStatus("ok");
-  }, [ready, restore]);
+    let cancelled = false;
+    void (async () => {
+      const decoded = decodeURIComponent(token);
+      if (await claimRecoveryPass(decoded)) {
+        if (!cancelled) setStatus("ok");
+        return;
+      }
+      // Compatibilità con i vecchi backup locali durante la migrazione.
+      const save = decodeSave(decoded);
+      if (!save) {
+        if (!cancelled) setStatus("err");
+        return;
+      }
+      restore(save);
+      if (!cancelled) {
+        setNick(save.nickname);
+        setStatus("ok");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [claimRecoveryPass, ready, restore]);
 
   return (
     <Screen>
@@ -43,7 +61,9 @@ export default function RecuperaPage() {
           <>
             <div className="text-6xl pop-in">📥</div>
             <h1 className="font-pixel text-sm glow-neon">PROGRESSO RIPRISTINATO</h1>
-            <p className="text-xl text-[var(--term)]">Bentornato, {nick}.</p>
+            <p className="text-xl text-[var(--term)]">
+              {nick ? `Bentornato, ${nick}.` : "Profilo collegato a questo dispositivo."}
+            </p>
             <button
               onClick={() => router.push("/")}
               className="font-pixel text-[11px] py-3 px-5 pixel-border bg-[var(--panel-2)] text-[var(--neon)] active:translate-y-[2px]"

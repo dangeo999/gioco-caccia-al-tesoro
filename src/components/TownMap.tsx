@@ -37,25 +37,31 @@ export default function TownMap({ onPlay }: { onPlay: (id: number) => void }) {
   const {
     nickname,
     playerId,
+    publicTag,
     coins,
     completedLevels,
     fragments,
     unlockedChapters,
     completionCode,
+    backendStatus,
+    createRecoveryPass,
     reset,
   } = useGame();
 
   const [showBackup, setShowBackup] = useState(false);
   const [origin, setOrigin] = useState("");
   const [copied, setCopied] = useState(false);
+  const [backupLink, setBackupLink] = useState("");
+  const [backupError, setBackupError] = useState(false);
   useEffect(() => setOrigin(window.location.origin), []);
 
-  const backupLink =
+  const legacyBackupLink =
     origin +
     "/recupera#" +
     encodeSave({
       nickname,
       playerId,
+      publicTag,
       coins,
       fragments,
       completedLevels,
@@ -190,6 +196,20 @@ export default function TownMap({ onPlay }: { onPlay: (id: number) => void }) {
         <div className="leading-tight">
           <p className="font-pixel text-[9px] text-[var(--muted)]">RECLUTA</p>
           <p className="text-2xl text-[var(--neon)]">{nickname}</p>
+          {publicTag && (
+            <p className="font-pixel text-[7px] text-[var(--muted)]">ID · {publicTag}</p>
+          )}
+          <p
+            className={`font-pixel text-[6px] mt-1 ${
+              backendStatus === "online" ? "text-[var(--term)]" : "text-[var(--muted)]"
+            }`}
+          >
+            {backendStatus === "online"
+              ? "cloud ✓"
+              : backendStatus === "connecting"
+                ? "cloud …"
+                : "offline"}
+          </p>
         </div>
         <div className="text-right leading-tight">
           <p className="font-pixel text-[9px] text-[var(--muted)]">
@@ -197,9 +217,21 @@ export default function TownMap({ onPlay }: { onPlay: (id: number) => void }) {
           </p>
           <div className="flex gap-3 justify-end">
             <button
-              onClick={() => {
+              onClick={async () => {
                 setCopied(false);
+                setBackupError(false);
+                setBackupLink("");
                 setShowBackup(true);
+                if (backendStatus === "online") {
+                  try {
+                    const token = await createRecoveryPass();
+                    setBackupLink(`${origin}/recupera#${encodeURIComponent(token)}`);
+                  } catch {
+                    setBackupError(true);
+                  }
+                } else {
+                  setBackupLink(legacyBackupLink);
+                }
               }}
               className="text-sm text-[var(--neon)] underline"
             >
@@ -306,7 +338,13 @@ export default function TownMap({ onPlay }: { onPlay: (id: number) => void }) {
           <div className="absolute bottom-4 right-3 z-30 max-w-[60%] text-right">
             {near.status === "play" && (
               <button
-                onClick={() => onPlay(near.id)}
+                onClick={(e) => {
+                  if (e.detail === 0) onPlay(near.id);
+                }}
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  onPlay(near.id);
+                }}
                 className="font-pixel text-[11px] px-4 py-3 pixel-border bg-[var(--panel-2)] text-[var(--neon)] pulse-glow active:translate-y-[2px]"
               >
                 ENTRA ▶
@@ -329,26 +367,36 @@ export default function TownMap({ onPlay }: { onPlay: (id: number) => void }) {
       {showBackup && (
         <Modal title="BACKUP PROGRESSO" onClose={() => setShowBackup(false)}>
           <p className="text-base text-[var(--muted)] mb-3">
-            Salva questo link (o scansiona il QR da un altro telefono) per
-            recuperare il progresso se cambi dispositivo. È una fotografia di
-            adesso: ricopialo dopo aver giocato altro.
+            {backendStatus === "online"
+              ? "Salva questo Pass Argil: collega un nuovo telefono al tuo profilo e si usa una sola volta."
+              : "Backend non ancora attivo: questo è un backup locale provvisorio del progresso."}
           </p>
-          <div className="bg-white p-2 rounded mx-auto w-fit mb-3">
-            <QRCodeSVG value={backupLink} size={160} level="L" />
-          </div>
-          <p className="text-xs text-[var(--muted)] break-all bg-[var(--panel-2)] p-2 pixel-border mb-3">
-            {backupLink}
-          </p>
+          {backupLink ? (
+            <>
+              <div className="bg-white p-2 rounded mx-auto w-fit mb-3">
+                <QRCodeSVG value={backupLink} size={160} level="M" />
+              </div>
+              <p className="text-xs text-[var(--muted)] break-all bg-[var(--panel-2)] p-2 pixel-border mb-3">
+                {backupLink}
+              </p>
+            </>
+          ) : (
+            <p className="text-center text-[var(--muted)] py-8">
+              {backupError ? "Impossibile creare il Pass. Riprova." : "creazione pass…"}
+            </p>
+          )}
           <button
             onClick={async () => {
               try {
+                if (!backupLink) return;
                 await navigator.clipboard.writeText(backupLink);
                 setCopied(true);
               } catch {
                 /* clipboard non disponibile */
               }
             }}
-            className="w-full font-pixel text-[10px] py-3 pixel-border bg-[var(--panel-2)] text-[var(--neon)] active:translate-y-[2px]"
+            disabled={!backupLink}
+            className="w-full font-pixel text-[10px] py-3 pixel-border bg-[var(--panel-2)] text-[var(--neon)] disabled:opacity-40 active:translate-y-[2px]"
           >
             {copied ? "COPIATO ✓" : "COPIA LINK"}
           </button>

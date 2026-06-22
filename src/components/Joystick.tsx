@@ -14,7 +14,9 @@ export default function Joystick({
   onEnd: () => void;
 }) {
   const baseRef = useRef<HTMLDivElement>(null);
-  const active = useRef(false);
+  // Ogni comando conserva il proprio dito: un secondo dito resta libero per
+  // ruotare la visuale o premere i pulsanti mentre si continua a camminare.
+  const activePointer = useRef<number | null>(null);
   const [knob, setKnob] = useState({ x: 0, y: 0 });
   const MAX = 44; // raggio massimo della levetta in px
 
@@ -35,8 +37,9 @@ export default function Joystick({
     onMove(dx / MAX, dy / MAX);
   }
 
-  function stop() {
-    active.current = false;
+  function stop(pointerId: number) {
+    if (activePointer.current !== pointerId) return;
+    activePointer.current = null;
     setKnob({ x: 0, y: 0 });
     onEnd();
   }
@@ -45,13 +48,20 @@ export default function Joystick({
     <div
       ref={baseRef}
       onPointerDown={(e) => {
-        active.current = true;
-        (e.target as HTMLElement).setPointerCapture(e.pointerId);
+        if (activePointer.current !== null) return;
+        e.preventDefault();
+        activePointer.current = e.pointerId;
+        e.currentTarget.setPointerCapture(e.pointerId);
         update(e);
       }}
-      onPointerMove={(e) => active.current && update(e)}
-      onPointerUp={stop}
-      onPointerCancel={stop}
+      onPointerMove={(e) => activePointer.current === e.pointerId && update(e)}
+      onPointerUp={(e) => {
+        if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+          e.currentTarget.releasePointerCapture(e.pointerId);
+        }
+        stop(e.pointerId);
+      }}
+      onPointerCancel={(e) => stop(e.pointerId)}
       className="relative w-28 h-28 rounded-full bg-[var(--panel)]/70 pixel-border touch-none select-none"
       aria-label="Joystick di movimento"
     >

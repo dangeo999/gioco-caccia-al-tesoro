@@ -14,7 +14,7 @@ import Screen from "@/components/ui/Screen";
 export default function UnlockPage() {
   const params = useParams();
   const router = useRouter();
-  const { ready, unlockChapter } = useGame();
+  const { ready, redeemChapter } = useGame();
 
   const token = String(params.token ?? "");
   const chapter = chapterByToken(token);
@@ -22,9 +22,14 @@ export default function UnlockPage() {
 
   useEffect(() => {
     if (!ready || !chapter) return;
-    unlockChapter(chapter.id);
-    setUnlocked(true);
-  }, [ready, chapter, unlockChapter]);
+    let cancelled = false;
+    void redeemChapter(token, chapter.id).then((ok) => {
+      if (!cancelled) setUnlocked(ok);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [ready, chapter, redeemChapter, token]);
 
   if (!chapter) {
     return (

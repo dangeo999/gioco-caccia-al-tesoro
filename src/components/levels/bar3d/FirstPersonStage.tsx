@@ -267,7 +267,7 @@ export default function FirstPersonStage({
   const keysRef = useRef({ x: 0, y: 0 });
   const sprintRef = useRef(false);
   const lookRef = useRef({ yaw: 0, pitch: 0 });
-  const dragging = useRef(false);
+  const lookPointer = useRef<number | null>(null);
   const last = useRef({ x: 0, y: 0 });
   const dragMoved = useRef(false);
   const registryRef = useRef(new Map<string, InteractiveTarget>());
@@ -385,14 +385,15 @@ export default function FirstPersonStage({
         aria-label="Area visuale: trascina per girarti"
         className="game-look-zone absolute inset-0 z-10 touch-none select-none"
         onPointerDown={(e) => {
-          if (!e.isPrimary) return;
+          if (lookPointer.current !== null) return;
+          e.preventDefault();
+          lookPointer.current = e.pointerId;
           e.currentTarget.setPointerCapture(e.pointerId);
-          dragging.current = true;
           dragMoved.current = false;
           last.current = { x: e.clientX, y: e.clientY };
         }}
         onPointerMove={(e) => {
-          if (!dragging.current || !e.isPrimary) return;
+          if (lookPointer.current !== e.pointerId) return;
           const dx = e.clientX - last.current.x;
           const dy = e.clientY - last.current.y;
           if (Math.abs(dx) + Math.abs(dy) > 3) {
@@ -409,12 +410,15 @@ export default function FirstPersonStage({
           );
         }}
         onPointerUp={(e) => {
-          dragging.current = false;
+          if (lookPointer.current !== e.pointerId) return;
+          lookPointer.current = null;
           if (e.currentTarget.hasPointerCapture(e.pointerId)) {
             e.currentTarget.releasePointerCapture(e.pointerId);
           }
         }}
-        onPointerCancel={() => (dragging.current = false)}
+        onPointerCancel={(e) => {
+          if (lookPointer.current === e.pointerId) lookPointer.current = null;
+        }}
       />
 
       <button
@@ -438,7 +442,16 @@ export default function FirstPersonStage({
 
       {activeTarget && (
         <button
-          onClick={interact}
+          onClick={(e) => {
+            // I click con detail 0 arrivano da tastiera/tecnologie assistive.
+            if (e.detail === 0) interact();
+          }}
+          onPointerDown={(e) => {
+            // Il tap esplicito deve partire anche se un altro dito sta ancora
+            // tenendo premuto il joystick (Safari/iOS incluso).
+            e.preventDefault();
+            interact();
+          }}
           // Sollevato sopra il joystick (sinistra) e il taccuino (destra) per
           // non sovrapporsi ai comandi su schermi stretti.
           className="absolute left-1/2 bottom-44 -translate-x-1/2 z-30 font-pixel text-[9px] leading-relaxed px-4 py-3 pixel-border bg-[var(--panel-2)]/95 text-[var(--neon)] max-w-[80%] text-center active:translate-y-[2px]"
