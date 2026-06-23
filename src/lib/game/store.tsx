@@ -161,9 +161,15 @@ export function GameProvider({ children }: { children: ReactNode }) {
         if (d.completedLevels.includes(level)) return d; // niente doppio premio
         const completedLevels = [...d.completedLevels, level];
         // Codice finale alla conquista del 10° capitolo.
+        // Codice finale locale solo in modalità offline pura: quando Supabase è
+        // attivo la fonte autorevole è il server (ARGIL-xxxx-xxxx casuale). Così
+        // evitiamo di mostrare un codice deterministico che verrebbe comunque
+        // sovrascritto al primo sync.
         const completionCode =
           d.completionCode ??
-          (completedLevels.length >= TOTAL_CHAPTERS && d.nickname
+          (!isSupabaseConfigured() &&
+          completedLevels.length >= TOTAL_CHAPTERS &&
+          d.nickname
             ? completionCodeFor(d.nickname)
             : null);
         return {

@@ -16,6 +16,9 @@ backend servono due operazioni nel Dashboard Supabase.
 2. Copiare tutto il contenuto di
    `migrations/202606220001_secure_game_backend.sql`.
 3. Eseguire la query una sola volta.
+4. Ripetere con `migrations/202606230001_rate_limit_solutions.sql`: aggiunge il
+   lockout anti brute-force su `complete_chapter` (5 tentativi errati per
+   capitolo → blocco di 5 minuti).
 
 La migrazione crea tabelle, RLS e RPC per:
 
