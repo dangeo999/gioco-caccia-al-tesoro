@@ -11,13 +11,16 @@ export default function CodeLock({
   solution,
   slotLabels,
   hint,
+  hints,
   onSolved,
 }: {
   solution: string;
   /** Etichette sotto ogni cifra (es. ["Insegna","Bottiglie","Lavagna"]). */
   slotLabels: string[];
-  /** Suggerimento mostrato sotto il tastierino. */
+  /** Suggerimento singolo, mostrato dopo 2 errori. */
   hint?: string;
+  /** Suggerimenti progressivi: uno in più a ogni errore. Hanno priorità su `hint`. */
+  hints?: string[];
   onSolved: () => void;
 }) {
   const len = solution.length;
@@ -33,6 +36,13 @@ export default function CodeLock({
     }
   };
   const back = () => setEntry((e) => e.slice(0, -1));
+
+  // Aiuto crescente: dopo ogni errore mostra un suggerimento più esplicito.
+  const escalating =
+    hints && hints.length > 0 && attempts >= 1
+      ? hints[Math.min(attempts, hints.length) - 1]
+      : undefined;
+  const shownHint = escalating ?? (hint && attempts >= 2 ? hint : undefined);
   const submit = () => {
     if (entry === solution) {
       sfx.solved();
@@ -92,10 +102,12 @@ export default function CodeLock({
       </div>
 
       {wrong && (
-        <p className="text-[var(--magenta)] text-lg">Codice errato. Riprova.</p>
+        <p className="text-[var(--magenta)] text-lg">
+          Codice errato. Tentativo {attempts}. Riprova.
+        </p>
       )}
-      {hint && attempts >= 2 && !wrong && (
-        <p className="text-[var(--muted)] text-base text-center">💡 {hint}</p>
+      {shownHint && (
+        <p className="text-[var(--muted)] text-base text-center">💡 {shownHint}</p>
       )}
     </div>
   );

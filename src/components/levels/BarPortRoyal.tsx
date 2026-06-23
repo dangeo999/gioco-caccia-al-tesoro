@@ -50,14 +50,25 @@ const OUTRO =
 type Hotspot = "neon" | "bottles" | "chalk" | "jukebox" | "drawer";
 
 // Note che finiscono nel "Taccuino" quando si esamina un oggetto: così il
-// giocatore non deve memorizzare nulla (livello volutamente accogliente).
+// giocatore non deve memorizzare la scena. Registriamo l'OSSERVAZIONE (cosa
+// guardare), non la cifra già risolta: contare e leggere tocca a lui.
 const NOTES: Record<Hotspot, string> = {
-  neon: "Insegna (LUCE): 6 lettere ancora accese → 6",
-  bottles: "Scaffale (VETRO): la bottiglia girata è la n. 3 → 3",
-  chalk: "Lavagna (GUSTO): prezzo cerchiato € 4,8 → 8",
-  jukebox: "Ordine del codice: LUCE · VETRO · GUSTO",
-  drawer: "Cassetto: serratura a 3 cifre, sotto il bancone",
+  neon: "Insegna PORTROYAL: alcune lettere sono fulminate. Conta quelle ancora ACCESE.",
+  bottles: "Scaffale: una bottiglia è girata al contrario. Leggi il suo NUMERO di posizione.",
+  chalk: "Lavagna: un prezzo è cerchiato. Ti serve solo la sua ULTIMA cifra.",
+  jukebox: "Ordine del codice → LUCE (insegna) · VETRO (bottiglie) · GUSTO (lavagna).",
+  drawer: "Cassetto sotto il bancone: serratura a 3 cifre.",
 };
+
+// Ordine nel Taccuino e quali indizi forniscono una cifra del codice.
+const CLUE_ORDER: { id: Hotspot; title: string }[] = [
+  { id: "neon", title: "Insegna al neon" },
+  { id: "bottles", title: "Scaffale bottiglie" },
+  { id: "chalk", title: "Lavagna cocktail" },
+  { id: "jukebox", title: "Jukebox (ordine)" },
+  { id: "drawer", title: "Cassetto" },
+];
+const DIGIT_CLUES: Hotspot[] = ["neon", "bottles", "chalk"];
 
 export default function BarPortRoyal({ onExit }: { onExit: () => void }) {
   const { completeLevel } = useGame();
@@ -86,7 +97,8 @@ export default function BarPortRoyal({ onExit }: { onExit: () => void }) {
     setPhase("win");
   }
 
-  const noteList = Object.values(notes);
+  const digitsFound = DIGIT_CLUES.filter((id) => notes[id]).length;
+  const allDigitsSeen = digitsFound === DIGIT_CLUES.length;
 
   // ---- INTRO ----
   if (phase === "intro") {
@@ -189,25 +201,37 @@ export default function BarPortRoyal({ onExit }: { onExit: () => void }) {
           right: "max(0.75rem, env(safe-area-inset-right))",
         }}
       >
-        📓 {noteList.length}
+        📓 {digitsFound}/3
       </button>
 
       {showNotes && (
         <Modal title="TACCUINO" onClose={() => setShowNotes(false)}>
-          {noteList.length === 0 ? (
-            <p className="text-[var(--muted)] text-lg">
-              Non hai ancora esaminato nulla. Avvicinati agli oggetti del bar e
-              tocca <b>USA</b> per annotare gli indizi qui.
-            </p>
-          ) : (
-            <ul className="space-y-2">
-              {noteList.map((n, i) => (
-                <li key={i} className="text-lg text-[var(--term)]">
-                  • {n}
+          <p className="text-[var(--muted)] text-base mb-3">
+            Cifre trovate:{" "}
+            <b className="text-[var(--amber)]">{digitsFound}/3</b>. Avvicinati
+            agli oggetti del bar e tocca <b>USA</b> per annotare cosa osservare.
+          </p>
+          <ul className="space-y-2">
+            {CLUE_ORDER.map(({ id, title }) => {
+              const seen = notes[id];
+              return (
+                <li
+                  key={id}
+                  className={`pixel-border p-2 ${seen ? "bg-[var(--panel)]" : "opacity-50"}`}
+                >
+                  <div className="flex items-center gap-2 text-[var(--term)]">
+                    <span className={seen ? "text-[var(--neon)]" : "text-[var(--muted)]"}>
+                      {seen ? "✓" : "○"}
+                    </span>
+                    <b>{title}</b>
+                  </div>
+                  <p className="text-base text-[var(--muted)] mt-1">
+                    {seen ?? "Non ancora esaminato."}
+                  </p>
                 </li>
-              ))}
-            </ul>
-          )}
+              );
+            })}
+          </ul>
         </Modal>
       )}
 
@@ -297,10 +321,20 @@ export default function BarPortRoyal({ onExit }: { onExit: () => void }) {
 
       {open === "drawer" && (
         <Modal title="CASSETTO — TRE CIFRE" onClose={closeExamine}>
+          {!allDigitsSeen && (
+            <p className="text-[var(--amber)] text-base mb-3">
+              ⚠ Ti manca qualcosa: esamina insegna, bottiglie e lavagna prima di
+              comporre il codice ({digitsFound}/3).
+            </p>
+          )}
           <CodeLock
             solution={SOLUTION}
             slotLabels={["Insegna", "Bottiglie", "Lavagna"]}
-            hint="Apri il 📓 Taccuino: hai già annotato le tre cifre e il loro ordine."
+            hints={[
+              "Apri il 📓 Taccuino: le tre cifre vengono dagli indizi che hai esaminato.",
+              "Ordine giusto → LUCE (insegna) · VETRO (bottiglie) · GUSTO (lavagna).",
+              "Conta: lettere accese dell'insegna · numero della bottiglia girata · ultima cifra del prezzo cerchiato.",
+            ]}
             onSolved={handleSolved}
           />
         </Modal>
