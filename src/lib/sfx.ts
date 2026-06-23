@@ -93,4 +93,15 @@ export const sfx = {
     [440, 660, 880].forEach((f, i) => tone(f, 0.14, "sine", 0.05, i * 0.07));
     haptic(20);
   },
+  // Accesso al "collettivo": breve sequenza ascendente da modem/boot.
+  boot: () => {
+    [196, 262, 392].forEach((f, i) => tone(f, 0.1, "sine", 0.045, i * 0.06));
+    haptic(12);
+  },
+  // Interferenza/glitch: tono basso sporco + scintilla acuta.
+  glitch: () => {
+    tone(90, 0.2, "sawtooth", 0.05);
+    tone(1180, 0.04, "square", 0.03, 0.03);
+    haptic([10, 30, 10]);
+  },
 };
