@@ -250,3 +250,31 @@ img.pixelated { image-rendering: pixelated; }
   72% { opacity: 0.8; transform: translate(4px, 0); clip-path: inset(35% 0 45% 0); }
   75% { opacity: 0.8; transform: translate(-3px, 0); clip-path: inset(8% 0 75% 0); }
 }
+
+/* Banda di scansione: una luce ciano scorre lentamente sullo schermo
+   (vibe sorveglianza). Tenue, sopra al contenuto ma sotto le scanline. */
+.scan-sweep {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 40;
+  overflow: hidden;
+}
+.scan-sweep::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 28%;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    rgba(34, 211, 238, 0.07) 50%,
+    transparent
+  );
+  animation: scan-sweep 6.5s linear infinite;
+}
+@keyframes scan-sweep {
+  0% { transform: translateY(-45%); }
+  100% { transform: translateY(150%); }
+}

@@ -95,7 +95,7 @@ function FPController({
       _move.addScaledVector(_dir, -vy);
       _move.addScaledVector(_right, vx);
       if (_move.lengthSq() > 0) {
-        const speed = sprintRef.current ? 4.1 : 2.8;
+        const speed = sprintRef.current ? 2.7 : 1.9;
         _move.normalize().multiplyScalar(speed * Math.min(delta, 0.05));
         const radius = 0.28;
         const blocked = (x: number, z: number) => obstacles.some((box) =>
@@ -251,6 +251,7 @@ export default function FirstPersonStage({
   onExit,
   hint,
   startPos = [0, 1.5, 3.2],
+  startYaw = 0,
   bounds = { minX: -4, maxX: 4, minZ: -4, maxZ: 4 },
   obstacles = [],
   exitLabel = "‹ esci",
@@ -259,6 +260,7 @@ export default function FirstPersonStage({
   onExit: () => void;
   hint?: string;
   startPos?: [number, number, number];
+  startYaw?: number;
   bounds?: Bounds;
   obstacles?: Obstacle[];
   exitLabel?: string;
@@ -266,7 +268,7 @@ export default function FirstPersonStage({
   const moveRef = useRef({ x: 0, y: 0 });
   const keysRef = useRef({ x: 0, y: 0 });
   const sprintRef = useRef(false);
-  const lookRef = useRef({ yaw: 0, pitch: 0 });
+  const lookRef = useRef({ yaw: startYaw, pitch: 0 });
   const lookPointer = useRef<number | null>(null);
   const last = useRef({ x: 0, y: 0 });
   const dragMoved = useRef(false);
@@ -373,7 +375,7 @@ export default function FirstPersonStage({
           sprintRef={sprintRef}
         />
         <EffectComposer multisampling={0}>
-          <Pixelation granularity={5} />
+          <Pixelation granularity={3} />
         </EffectComposer>
       </Canvas>
 

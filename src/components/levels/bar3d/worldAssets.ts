@@ -27,15 +27,30 @@ export const BAR_WORLD_ASSETS: {
   interior: WorldAssetSlot;
 } = {
   exterior: {
-    visual: null,
+    visual: {
+      url: "/levels/bar/models/02_strada_edifici.glb",
+      position: [0, 0.3, 0],
+      rotation: [0, 0, 0],
+      scale: 0.18,
+    },
     colliderUrl: null,
+    // Ingresso Port Royal: bar ext a game x[1.3..6.5], fronte strada z≈-1.25.
     entryPoint: {
-      position: [-4.25, 1.15, -6.13],
-      size: [1.65, 2.3, 0.18],
+      position: [3.9, 1.0, -1.15],
+      size: [3.6, 2.4, 0.9],
     },
   },
   interior: {
-    visual: null,
+    // Scan "bar vano sx" + "bar vano dx" esportati da Blender (04_bar_interno.glb).
+    // World bounds Blender: X[10.23,60.03] Y[27.83,56.34] Z(alt)[0.03,17.74].
+    // Con yup nel GLB: X→X, Zalt→Y, -Y→Z. Scala 0.18 → stanza ~9×5×3.2 m.
+    // position centra il modello sull'origine (pavimento a y=0); rifinire a occhio.
+    visual: {
+      url: "/levels/bar/models/04_bar_interno.glb",
+      position: [-6.32, 0, 7.57],
+      rotation: [0, 0, 0],
+      scale: 0.18,
+    },
     colliderUrl: null,
     entryPoint: null,
   },
