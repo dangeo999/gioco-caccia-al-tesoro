@@ -13,7 +13,7 @@ const ROOM_MAX_X = 4.49;
 const ROOM_MIN_Z = -2.57;
 const ROOM_MAX_Z = 2.56;
 const WALL_WHITE = "#f2eee4";
-const FLOOR_FILL = "#c9b898";
+const FLOOR_FILL = "#b3926f";
 const FLOOR_EXTRA_X = 1.8;
 const FLOOR_EXTRA_Z = 1.4;
 const FLOOR_Y = -0.012;
@@ -53,6 +53,45 @@ function makeSubtleNoiseTexture(
   return texture;
 }
 
+// Texture pavimento: piastrelle grigie (tono FLOOR_FILL) con fughe scure e grana
+// fine, così il piano di riempimento legge come lo stesso pavimento dello scan.
+function makeFloorTexture(repeatX: number, repeatY: number): THREE.CanvasTexture {
+  const size = 256;
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext("2d")!;
+  // base
+  ctx.fillStyle = "#b3926f";
+  ctx.fillRect(0, 0, size, size);
+  // grana fine
+  const img = ctx.getImageData(0, 0, size, size);
+  for (let i = 0; i < img.data.length; i += 4) {
+    const g = (Math.random() - 0.5) * 14;
+    img.data[i] += g;
+    img.data[i + 1] += g;
+    img.data[i + 2] += g;
+  }
+  ctx.putImageData(img, 0, 0);
+  // Fughe molto leggere: appena accennate, così non rivelano il giunto con lo scan.
+  ctx.strokeStyle = "rgba(90,86,80,0.28)";
+  ctx.lineWidth = 1.5;
+  const step = size / 2;
+  for (let p = 0; p <= size; p += step) {
+    ctx.beginPath();
+    ctx.moveTo(p, 0);
+    ctx.lineTo(p, size);
+    ctx.moveTo(0, p);
+    ctx.lineTo(size, p);
+    ctx.stroke();
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(repeatX, repeatY);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return tex;
+}
+
 function WallFill({
   position,
   size,
@@ -73,6 +112,14 @@ function RoomFill() {
     () => makeSubtleNoiseTexture([196, 153, 95], [126, 91, 55], 6, 3),
     [],
   );
+  const floorMap = useMemo(
+    () =>
+      makeFloorTexture(
+        ROOM_MAX_X - ROOM_MIN_X + FLOOR_EXTRA_X,
+        ROOM_MAX_Z - ROOM_MIN_Z + FLOOR_EXTRA_Z,
+      ),
+    [],
+  );
 
   return (
     <>
@@ -83,9 +130,12 @@ function RoomFill() {
             ROOM_MAX_Z - ROOM_MIN_Z + FLOOR_EXTRA_Z,
           ]}
         />
-        <meshStandardMaterial
-          color={FLOOR_FILL}
-          roughness={0.96}
+        {/* color bianco = moltiplicatore neutro: il tono sta solo nella texture,
+            così il floor rende esattamente #b3926f (nessuna doppia moltiplica). */}
+        <meshBasicMaterial
+          color="#ffffff"
+          map={floorMap}
+          toneMapped={false}
           side={THREE.DoubleSide}
         />
       </mesh>
