@@ -11,7 +11,10 @@ import type { ScannedAsset } from "./worldAssets";
  *    delle FACCIATE (materiali con texture) restano vivi anche in scena buia,
  *    senza toccare strada e lastre nere (che non hanno texture).
  *  - `clipBackdropY`: taglia le lastre nere di backdrop (materiale "wall_backdrop")
- *    appena sopra il tetto, così non svettano nel cielo. */
+ *    appena sopra il tetto, così non svettano nel cielo.
+ *  - `softBackdrop`: rende i muri di backdrop maschere di sola profondità (invisibili)
+ *    così occludono lo scan sporco senza svettare come lastre. I varchi che restano
+ *    si coprono con il fumo (vedi GapSmoke in ExteriorBar). */
 export default function ScannedWorld({
   asset,
   emissiveBoost = 0,
@@ -54,6 +57,8 @@ export default function ScannedWorld({
             mats.some((mat) => mat.name === "wall_backdrop"));
 
         if (isBackdropMesh) {
+          // Muri di backdrop: maschera di sola profondità (invisibili) → occludono
+          // lo scan sporco senza svettare. I varchi si coprono col fumo (GapSmoke).
           const depthMask = new THREE.MeshBasicMaterial({
             name: "wall_backdrop_depth_mask",
             colorWrite: false,

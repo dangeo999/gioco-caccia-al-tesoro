@@ -413,6 +413,100 @@ function NightSky() {
   );
 }
 
+// Batuffolo di fumo irregolare: tanti blob radiali sovrapposti → nuvola soffice
+// dai bordi frastagliati (più credibile di un singolo alone tondo).
+function makeSmokeTexture(): THREE.CanvasTexture {
+  const s = 128;
+  const c = document.createElement("canvas");
+  c.width = c.height = s;
+  const ctx = c.getContext("2d")!;
+  for (let i = 0; i < 26; i++) {
+    const r = s * (0.1 + Math.random() * 0.24);
+    const x = s / 2 + (Math.random() - 0.5) * s * 0.52;
+    const y = s / 2 + (Math.random() - 0.5) * s * 0.52;
+    const a = 0.05 + Math.random() * 0.1;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, `rgba(255,255,255,${a})`);
+    g.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+/** Banco di fumo denso che copre un varco della mappa: molte volute sovrapposte
+ *  che salgono, ondeggiano e ruotano piano. Nasconde il vuoto dietro la geometria
+ *  scansionata con atmosfera fitta invece che con un muro. */
+function GapSmoke({
+  position,
+  width = 4.5,
+  height = 5,
+  count = 46,
+}: {
+  position: [number, number, number];
+  width?: number;
+  height?: number;
+  count?: number;
+}) {
+  const tex = useMemo(makeSmokeTexture, []);
+  const group = useRef<THREE.Group>(null);
+  const puffs = useMemo(
+    () =>
+      Array.from({ length: count }).map(() => {
+        // Densità maggiore in basso: il fumo si posa e si dirada salendo.
+        const yBias = Math.pow(Math.random(), 1.7);
+        return {
+          x0: (Math.random() - 0.5) * width,
+          y0: yBias * height,
+          z0: (Math.random() - 0.5) * 1.6,
+          s: 2.2 + Math.random() * 3.2,
+          phase: Math.random() * Math.PI * 2,
+          bob: 0.25 + Math.random() * 0.4,
+          sway: 0.15 + Math.random() * 0.35,
+          rot: Math.random() * Math.PI * 2,
+          rotSpeed: (Math.random() - 0.5) * 0.12,
+          // più opaco in basso, più tenue in alto
+          peak: 0.28 * (1 - yBias * 0.6),
+        };
+      }),
+    [count, width, height],
+  );
+  useFrame((st) => {
+    const g = group.current;
+    if (!g) return;
+    const t = st.clock.elapsedTime;
+    g.children.forEach((ch, i) => {
+      const pf = puffs[i];
+      ch.position.y = pf.y0 + Math.sin(t * 0.2 + pf.phase) * pf.bob;
+      ch.position.x = pf.x0 + Math.sin(t * 0.12 + pf.phase) * pf.sway;
+      const m = (ch as THREE.Sprite).material as THREE.SpriteMaterial;
+      m.rotation = pf.rot + t * pf.rotSpeed;
+      m.opacity = pf.peak * (0.55 + 0.45 * Math.sin(t * 0.25 + pf.phase));
+    });
+  });
+  return (
+    <group ref={group} position={position}>
+      {puffs.map((pf, i) => (
+        <sprite key={i} position={[pf.x0, pf.y0, pf.z0]} scale={[pf.s, pf.s, 1]}>
+          <spriteMaterial
+            map={tex}
+            transparent
+            depthWrite={false}
+            opacity={pf.peak}
+            color="#b3b7c6"
+            fog={false}
+            toneMapped={false}
+          />
+        </sprite>
+      ))}
+    </group>
+  );
+}
+
 /** Strada Port Royal: solo il mondo scansionato + luci + trigger d'ingresso. */
 function OpenStreet({ onEnter }: { onEnter: () => void }) {
   const scanned = BAR_WORLD_ASSETS.exterior.visual;
@@ -466,6 +560,8 @@ function OpenStreet({ onEnter }: { onEnter: () => void }) {
       {scanned && (
         <>
           <ScannedWorld asset={scanned} emissiveBoost={0.22} clipBackdropY={8} softBackdrop />
+          {/* Fumo che copre il varco tra i palazzi a sud (ex "buco di mappa"). */}
+          <GapSmoke position={[-6.5, 0.3, -2.5]} width={4} height={4.5} />
           <UpperStreetHoleCap />
           {BAR_WORLD_ASSETS.exterior.entryPoint && (
             <Obj
@@ -526,7 +622,6 @@ export default function ExteriorBar({
       startYaw={-Math.PI / 2}
       bounds={{ minX: -13.5, maxX: 14.6, minZ: -4.6, maxZ: 3.4 }}
       obstacles={OBSTACLES}
-      debug
     >
       <OpenStreet onEnter={onEnter} />
     </FirstPersonStage>

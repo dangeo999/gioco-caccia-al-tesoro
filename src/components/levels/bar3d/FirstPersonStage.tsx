@@ -418,7 +418,7 @@ export default function FirstPersonStage({
         shadows="soft"
         dpr={[1, 1.25]}
         gl={{ antialias: false }}
-        camera={{ fov: 75, near: 0.1, far: 100 }}
+        camera={{ fov: 82, near: 0.1, far: 100 }}
       >
         <InteractionCtx.Provider value={interactionValue}>
           <Suspense fallback={null}>
