@@ -1,14 +1,11 @@
 "use client";
 
-import { useState } from "react";
 import { useGame } from "@/lib/game/store";
 import Onboarding from "@/components/Onboarding";
-import TownMap from "@/components/TownMap";
 import BarPortRoyal from "@/components/levels/BarPortRoyal";
 
 export default function Home() {
   const { ready, nickname } = useGame();
-  const [level, setLevel] = useState<number | null>(null);
 
   // Evita il "flash" prima di aver letto il salvataggio dal telefono.
   if (!ready) {
@@ -23,7 +20,6 @@ export default function Home() {
 
   if (!nickname) return <Onboarding />;
 
-  if (level === 1) return <BarPortRoyal onExit={() => setLevel(null)} />;
-
-  return <TownMap onPlay={(id) => setLevel(id)} />;
+  // Niente più schermata dei livelli: dopo l'onboarding si entra diretti nel bar.
+  return <BarPortRoyal />;
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Html } from "@react-three/drei";
+import { Preload } from "@react-three/drei";
 import { EffectComposer, Pixelation } from "@react-three/postprocessing";
 import {
   useCallback,
@@ -44,7 +44,83 @@ type InteractionContextValue = {
   register: (id: string, target: InteractiveTarget) => () => void;
 };
 
+type DebugFrame = {
+  camera: [number, number, number];
+  yaw: number;
+  pitch: number;
+  aimPoint: [number, number, number];
+  hitDistance: number | null;
+  hitObject: string | null;
+};
+
 const InteractionCtx = createContext<InteractionContextValue | null>(null);
+
+const toTuple = (v: THREE.Vector3): [number, number, number] => [v.x, v.y, v.z];
+const fmt = (n: number) => n.toFixed(2);
+const fmtVec = (v: [number, number, number]) => `${fmt(v[0])}, ${fmt(v[1])}, ${fmt(v[2])}`;
+
+function objectLabel(object: THREE.Object3D) {
+  let current: THREE.Object3D | null = object;
+  while (current) {
+    if (current.name) return current.name;
+    current = current.parent;
+  }
+  return object.type;
+}
+
+function DebugProbe({
+  lookRef,
+  onDebugFrame,
+}: {
+  lookRef: React.RefObject<{ yaw: number; pitch: number }>;
+  onDebugFrame: (frame: DebugFrame) => void;
+}) {
+  const { camera, scene } = useThree();
+  const raycaster = useMemo(() => new THREE.Raycaster(), []);
+  const direction = useMemo(() => new THREE.Vector3(), []);
+  const lastUpdate = useRef(0);
+
+  useFrame((state) => {
+    const now = state.clock.elapsedTime;
+    if (now - lastUpdate.current < 0.16) return;
+    lastUpdate.current = now;
+
+    camera.getWorldDirection(direction);
+    raycaster.set(camera.position, direction);
+    raycaster.camera = camera;
+    raycaster.far = 45;
+
+    const hit = raycaster.intersectObjects(scene.children, true).find(({ distance, object }) => {
+      if (distance < 0.08 || object.type === "Sprite") return false;
+      let current: THREE.Object3D | null = object;
+      while (current) {
+        if (current.renderOrder <= -90 || current.userData.debugSkip) return false;
+        current = current.parent;
+      }
+      const material = (object as THREE.Mesh).material;
+      const mats = Array.isArray(material) ? material : [material];
+      return !mats.some((mat) => !mat || mat.name === "wall_backdrop_depth_mask" || mat.depthTest === false);
+    });
+
+    const aimPoint = hit
+      ? hit.point
+      : camera.position.clone().addScaledVector(direction, 10);
+    const frame: DebugFrame = {
+      camera: toTuple(camera.position),
+      yaw: lookRef.current.yaw,
+      pitch: lookRef.current.pitch,
+      aimPoint: toTuple(aimPoint),
+      hitDistance: hit ? hit.distance : null,
+      hitObject: hit ? objectLabel(hit.object) : null,
+    };
+
+    (window as Window & { __pofiDebug?: DebugFrame }).__pofiDebug = frame;
+    document.documentElement.dataset.pofiDebug = JSON.stringify(frame);
+    onDebugFrame(frame);
+  });
+
+  return null;
+}
 
 /** Controller prima persona: muove la camera (joystick/tasti), ruota con il drag. */
 function FPController({
@@ -185,23 +261,6 @@ export function Obj({
           depthWrite={opacity > 0.1}
         />
       </mesh>
-      <Html center distanceFactor={9} position={[0, labelY, 0]} prepend style={{ opacity: focused || hover ? 1 : 0 }}>
-        <div
-          style={{
-            pointerEvents: "none",
-            whiteSpace: "nowrap",
-            fontFamily: "var(--font-term), monospace",
-            fontSize: 18,
-            padding: "1px 6px",
-            color: focused || hover ? "#22d3ee" : "#cfcfe0",
-            background: "rgba(10,10,14,0.7)",
-            border: "1px solid #2a2a3a",
-            transform: "translateY(-6px)",
-          }}
-        >
-          {label}
-        </div>
-      </Html>
     </group>
   );
 }
@@ -255,6 +314,7 @@ export default function FirstPersonStage({
   bounds = { minX: -4, maxX: 4, minZ: -4, maxZ: 4 },
   obstacles = [],
   exitLabel = "‹ esci",
+  debug = false,
 }: {
   children: ReactNode;
   onExit: () => void;
@@ -264,6 +324,7 @@ export default function FirstPersonStage({
   bounds?: Bounds;
   obstacles?: Obstacle[];
   exitLabel?: string;
+  debug?: boolean;
 }) {
   const moveRef = useRef({ x: 0, y: 0 });
   const keysRef = useRef({ x: 0, y: 0 });
@@ -276,6 +337,7 @@ export default function FirstPersonStage({
   const activeRef = useRef<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [hasLooked, setHasLooked] = useState(false);
+  const [debugFrame, setDebugFrame] = useState<DebugFrame | null>(null);
 
   const register = useCallback((id: string, target: InteractiveTarget) => {
     registryRef.current.set(id, target);
@@ -353,12 +415,18 @@ export default function FirstPersonStage({
   return (
     <div className="relative flex-1 pixel-border overflow-hidden touch-none select-none">
       <Canvas
+        shadows="soft"
         dpr={[1, 1.25]}
         gl={{ antialias: false }}
         camera={{ fov: 75, near: 0.1, far: 100 }}
       >
         <InteractionCtx.Provider value={interactionValue}>
-          <Suspense fallback={null}>{children}</Suspense>
+          <Suspense fallback={null}>
+            {children}
+            {/* Scalda la GPU (upload texture + compila shader) prima che il
+                giocatore prenda il controllo: niente hitch nei primi secondi. */}
+            <Preload all />
+          </Suspense>
         </InteractionCtx.Provider>
         <InteractionScanner
           registryRef={registryRef}
@@ -374,6 +442,7 @@ export default function FirstPersonStage({
           obstacles={obstacles}
           sprintRef={sprintRef}
         />
+        {debug && <DebugProbe lookRef={lookRef} onDebugFrame={setDebugFrame} />}
         <EffectComposer multisampling={0}>
           <Pixelation granularity={3} />
         </EffectComposer>
@@ -435,6 +504,25 @@ export default function FirstPersonStage({
       <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20 text-[var(--neon)] text-xl opacity-70 pointer-events-none">
         +
       </div>
+
+      {debug && debugFrame && (
+        <div
+          data-testid="debug-coord"
+          className="absolute left-2 top-12 z-40 pointer-events-none font-pixel text-[7px] leading-relaxed text-[var(--neon)] bg-black/75 px-2 py-2 pixel-border max-w-[260px]"
+        >
+          <div className="text-white/85">DEBUG COORD</div>
+          <div>CAM {fmtVec(debugFrame.camera)}</div>
+          <div>
+            LOOK Y {fmt(THREE.MathUtils.radToDeg(debugFrame.yaw))} P{" "}
+            {fmt(THREE.MathUtils.radToDeg(debugFrame.pitch))}
+          </div>
+          <div>MIRINO {fmtVec(debugFrame.aimPoint)}</div>
+          <div>
+            HIT {debugFrame.hitObject ?? "nessuno"}{" "}
+            {debugFrame.hitDistance != null ? `${fmt(debugFrame.hitDistance)}m` : ""}
+          </div>
+        </div>
+      )}
 
       {!hasLooked && (
         <div className="absolute right-3 bottom-32 z-20 pointer-events-none font-pixel text-[7px] leading-relaxed text-right text-white/80 bg-black/55 px-2 py-2 rounded pulse-glow">

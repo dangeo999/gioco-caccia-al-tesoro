@@ -2,9 +2,10 @@
 
 import { useMemo } from "react";
 import * as THREE from "three";
-import FirstPersonStage, { type Obstacle } from "./FirstPersonStage";
+import FirstPersonStage, { Obj, type Obstacle } from "./FirstPersonStage";
 import ScannedWorld from "./ScannedWorld";
 import { BAR_WORLD_ASSETS } from "./worldAssets";
+import { NEON_DISPLAY, NEON_OFF } from "./neonConfig";
 
 export type HotspotId = "neon" | "bottles" | "chalk" | "jukebox" | "drawer";
 
@@ -13,11 +14,16 @@ const ROOM_MAX_X = 4.49;
 const ROOM_MIN_Z = -2.57;
 const ROOM_MAX_Z = 2.56;
 const WALL_WHITE = "#f2eee4";
-const FLOOR_FILL = "#b3926f";
+// Colori campionati direttamente dai triangoli dello scan (04_bar_interno.glb):
+// pavimento dx #bdb2a3 / sx #979586 → medio greige desaturato (non l'arancione
+// inventato di prima); soffitto dx #b9a893. Così il fill combacia con la texture reale.
+const FLOOR_FILL = "#aaa494";
 const FLOOR_EXTRA_X = 1.8;
 const FLOOR_EXTRA_Z = 1.4;
-const FLOOR_Y = -0.012;
-const RIGHT_VAULT_COLOR = "#b58b55";
+// Lo scan poggia a Y≈0.006: il fill sta appena sotto (evita z-fighting dove il
+// pavimento scansionato lo copre) senza creare il gradino di ~1.8cm di prima.
+const FLOOR_Y = 0.004;
+const RIGHT_VAULT_COLOR = "#b9a893";
 
 function makeSubtleNoiseTexture(
   base: [number, number, number],
@@ -53,37 +59,41 @@ function makeSubtleNoiseTexture(
   return texture;
 }
 
-// Texture pavimento: piastrelle grigie (tono FLOOR_FILL) con fughe scure e grana
-// fine, così il piano di riempimento legge come lo stesso pavimento dello scan.
+// Texture pavimento: greige uniforme (FLOOR_FILL) mottled come lo scan — niente
+// griglia di fughe regolari, perché il pavimento fotogrammetrico non ne ha ed è
+// proprio la griglia che tradiva il giunto tra fill e scan.
 function makeFloorTexture(repeatX: number, repeatY: number): THREE.CanvasTexture {
   const size = 256;
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = size;
   const ctx = canvas.getContext("2d")!;
-  // base
-  ctx.fillStyle = "#b3926f";
+  // base greige (medio dei due vani dello scan)
+  ctx.fillStyle = FLOOR_FILL;
   ctx.fillRect(0, 0, size, size);
+  // macchie morbide a bassa frequenza: chiazze chiare/scure come lo scan
+  for (let i = 0; i < 34; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const r = 24 + Math.random() * 60;
+    const dark = Math.random() < 0.5;
+    const a = 0.05 + Math.random() * 0.07;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, dark ? `rgba(120,114,104,${a})` : `rgba(210,204,192,${a})`);
+    g.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
   // grana fine
   const img = ctx.getImageData(0, 0, size, size);
   for (let i = 0; i < img.data.length; i += 4) {
-    const g = (Math.random() - 0.5) * 14;
+    const g = (Math.random() - 0.5) * 12;
     img.data[i] += g;
     img.data[i + 1] += g;
     img.data[i + 2] += g;
   }
   ctx.putImageData(img, 0, 0);
-  // Fughe molto leggere: appena accennate, così non rivelano il giunto con lo scan.
-  ctx.strokeStyle = "rgba(90,86,80,0.28)";
-  ctx.lineWidth = 1.5;
-  const step = size / 2;
-  for (let p = 0; p <= size; p += step) {
-    ctx.beginPath();
-    ctx.moveTo(p, 0);
-    ctx.lineTo(p, size);
-    ctx.moveTo(0, p);
-    ctx.lineTo(size, p);
-    ctx.stroke();
-  }
   const tex = new THREE.CanvasTexture(canvas);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.repeat.set(repeatX, repeatY);
@@ -108,8 +118,10 @@ function WallFill({
 }
 
 function RoomFill() {
+  // Toni campionati dal soffitto dello scan (vano dx #b9a893): base tan chiaro,
+  // ombra un filo più scura → la volta legge come la texture reale, non arancione.
   const vaultMap = useMemo(
-    () => makeSubtleNoiseTexture([196, 153, 95], [126, 91, 55], 6, 3),
+    () => makeSubtleNoiseTexture([185, 168, 147], [150, 135, 116], 6, 3),
     [],
   );
   const floorMap = useMemo(
@@ -157,8 +169,10 @@ function RoomFill() {
         size={[0.14, 2.36, ROOM_MAX_Z - ROOM_MIN_Z + 0.2]}
       />
 
-      {/* Solo il vano destro: il soffitto del vano sinistro resta quello del GLB. */}
-      <mesh position={[1.92, -0.22, -0.04]} rotation={[0, 0, Math.PI / 2]} receiveShadow>
+      {/* Solo il vano destro: il soffitto del vano sinistro resta quello del GLB.
+          Centro Y -0.36 → picco volta a -0.36+3.55 = 3.19 m, esattamente il colmo
+          del soffitto scansionato (prima -0.22 → 3.33 m, ~14cm troppo alto). */}
+      <mesh position={[1.92, -0.36, -0.04]} rotation={[0, 0, Math.PI / 2]} receiveShadow>
         <cylinderGeometry args={[3.55, 3.55, 5.16, 48, 1, true, Math.PI / 4, Math.PI / 2]} />
         <meshStandardMaterial
           color={RIGHT_VAULT_COLOR}
@@ -171,9 +185,197 @@ function RoomFill() {
   );
 }
 
+// ===== Parete di siepe finta (dietro l'insegna) =====
+// Texture procedurale a foglie sovrapposte (bosso/edera) → il "green wall" del
+// bar reale che copre gli scaffali dello scan.
+function makeGrassTexture(repeatX: number, repeatY: number): THREE.CanvasTexture {
+  const size = 256;
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext("2d")!;
+  ctx.fillStyle = "#183414";
+  ctx.fillRect(0, 0, size, size);
+  // verdi vivi come la siepe reale (chiari sopra, scuri nei buchi)
+  const greens = ["#2c5e24", "#3d8b34", "#4fa83c", "#5cb84a", "#6fae3a", "#356e22", "#1f4a19"];
+  for (let i = 0; i < 2200; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const r = 3 + Math.random() * 5;
+    ctx.fillStyle = greens[(Math.random() * greens.length) | 0];
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(Math.random() * Math.PI);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, r, r * 0.55, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(repeatX, repeatY);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return tex;
+}
+
+// Pannello d'erba sulla parete sinistra del bar (X≈-4.48, rivolto nella stanza),
+// davanti agli scaffali per coprirli. Fa da sfondo all'insegna al neon.
+function GrassWall() {
+  const map = useMemo(() => makeGrassTexture(7, 4), []);
+  return (
+    <mesh position={[-3.98, 1.55, -0.4]} rotation={[0, Math.PI / 2, 0]}>
+      <planeGeometry args={[4.2, 2.7]} />
+      <meshStandardMaterial map={map} roughness={1} side={THREE.DoubleSide} />
+    </mesh>
+  );
+}
+
+// ===== Insegna al neon "Port Royal" =====
+// Corsivo BIANCO come l'insegna reale, su fondo TRASPARENTE (solo i tubi): lettere
+// accese (glow bianco caldo) + fulminate (spente) da neonConfig → il giocatore ne
+// conta 6 = prima cifra.
+function makeNeonTexture(): THREE.CanvasTexture {
+  const W = 1024;
+  const H = 256;
+  const canvas = document.createElement("canvas");
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext("2d")!;
+  ctx.clearRect(0, 0, W, H);
+  ctx.font = "italic 150px 'Brush Script MT', 'Segoe Script', cursive";
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "left";
+
+  // Ogni carattere di NEON_DISPLAY tranne lo spazio avanza l'indice-parola,
+  // così l'ordine delle fulminate combacia con NEON_OFF (e con la modale 2D).
+  type L = { ch: string; off: boolean; space: boolean; w: number };
+  const letters: L[] = [];
+  let wi = 0;
+  for (const ch of NEON_DISPLAY) {
+    if (ch === " ") {
+      letters.push({ ch, off: false, space: true, w: 54 });
+      continue;
+    }
+    letters.push({
+      ch,
+      off: NEON_OFF.has(wi),
+      space: false,
+      w: ctx.measureText(ch).width + 20,
+    });
+    wi++;
+  }
+  const total = letters.reduce((a, l) => a + l.w, 0);
+  let x = (W - total) / 2;
+  const y = H / 2 + 6;
+  for (const l of letters) {
+    if (!l.space) {
+      if (l.off) {
+        // lettera fulminata: tubo spento, appena visibile
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = "#2b2b34";
+        ctx.fillText(l.ch, x, y);
+      } else {
+        // lettera accesa: alone bianco caldo + cuore luminoso (come il reale)
+        ctx.shadowColor = "#fff4e2";
+        ctx.shadowBlur = 34;
+        ctx.fillStyle = "#ffffff";
+        ctx.fillText(l.ch, x, y);
+        ctx.shadowBlur = 12;
+        ctx.fillStyle = "#fff8ee";
+        ctx.fillText(l.ch, x, y);
+      }
+    }
+    x += l.w;
+  }
+  ctx.shadowBlur = 0;
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return tex;
+}
+
+// Insegna davanti al pannello d'erba (X leggermente più avanti del GrassWall così
+// i tubi restano sopra l'erba). Solo i tubi luminosi, nessuno sfondo.
+function NeonSign() {
+  const map = useMemo(makeNeonTexture, []);
+  return (
+    <group position={[-3.9, 2.05, -0.5]} rotation={[0, Math.PI / 2, 0]}>
+      {/* i tubi al neon: fondo trasparente, emissivi (non risentono della luce) */}
+      <mesh>
+        <planeGeometry args={[2.6, 0.66]} />
+        <meshBasicMaterial map={map} transparent toneMapped={false} />
+      </mesh>
+      {/* alone diffuso sull'erba */}
+      <pointLight position={[0, 0, 0.4]} intensity={3} distance={3.2} color="#fff4e2" />
+    </group>
+  );
+}
+
+// ===== Hotspot degli enigmi =====
+// Marker luminosi da "USA": aprono le stesse modali 2D del livello. Le posizioni
+// sono una prima taratura sul modello scansionato — ritoccabili in anteprima live.
+function Enigmas({ onInteract }: { onInteract: (id: HotspotId) => void }) {
+  return (
+    <>
+      <GrassWall />
+      <NeonSign />
+      {/* Zona cliccabile invisibile davanti all'insegna → enigma "neon". */}
+      <Obj
+        onClick={() => onInteract("neon")}
+        position={[-3.75, 2.05, -0.5]}
+        size={[0.25, 0.8, 2.6]}
+        color="#000000"
+        opacity={0}
+        label="Insegna al neon"
+        labelY={0.5}
+      />
+      {/* Bottiglie sul bancone (davanti al pannello d'erba). */}
+      <Obj
+        onClick={() => onInteract("bottles")}
+        position={[-3.65, 1.3, 1.2]}
+        size={[0.16, 0.16, 0.16]}
+        color="#ffb454"
+        emissive="#ffb454"
+        label="Scaffale bottiglie"
+        labelY={0.28}
+      />
+      {/* Lavagna dei cocktail (parete di fondo). */}
+      <Obj
+        onClick={() => onInteract("chalk")}
+        position={[-1.5, 1.55, -2.28]}
+        size={[0.18, 0.18, 0.06]}
+        color="#f2eee4"
+        emissive="#f2eee4"
+        label="Lavagna cocktail"
+        labelY={0.3}
+      />
+      {/* Jukebox (angolo). */}
+      <Obj
+        onClick={() => onInteract("jukebox")}
+        position={[-3.9, 1.0, 1.95]}
+        size={[0.2, 0.2, 0.2]}
+        color="#ff5cf2"
+        emissive="#ff5cf2"
+        label="Jukebox"
+        labelY={0.32}
+      />
+      {/* Cassetto con la serratura: sul cassettone di legno con la pianta. */}
+      <Obj
+        onClick={() => onInteract("drawer")}
+        position={[-1.15, 0.84, 1.36]}
+        size={[0.22, 0.16, 0.22]}
+        color="#22d3ee"
+        emissive="#22d3ee"
+        label="Cassetto (serratura)"
+        labelY={0.3}
+      />
+    </>
+  );
+}
+
 // ===== Interno del Port Royal =====
 // Modello scansionato (04_bar_interno.glb) + luci.
-function BarRoom() {
+function BarRoom({ onInteract }: { onInteract: (id: HotspotId) => void }) {
   const scanned = BAR_WORLD_ASSETS.interior.visual;
   return (
     <>
@@ -186,6 +388,7 @@ function BarRoom() {
 
       <RoomFill />
       {scanned && <ScannedWorld asset={scanned} />}
+      <Enigmas onInteract={onInteract} />
       {DEBUG_COLLIDERS &&
         OBSTACLES.map((o, i) => (
           <mesh
@@ -276,10 +479,9 @@ const OBSTACLES: Obstacle[] = [
 ];
 
 export default function FirstPersonBar({
+  onInteract,
   onExit,
 }: {
-  // onInteract resta nella firma del chiamante ma non è più usato: gli hotspot
-  // sono stati rimossi, verranno ri-aggiunti sul modello nuovo.
   onInteract: (id: HotspotId) => void;
   onExit: () => void;
 }) {
@@ -287,13 +489,13 @@ export default function FirstPersonBar({
     <FirstPersonStage
       onExit={onExit}
       exitLabel="‹ torna fuori"
-      hint="Interno bar (nuovo modello) · esplora"
+      hint="Cerca gli indizi · avvicinati e tocca USA"
       startPos={[0, 1.5, 1.9]}
       startYaw={0}
       bounds={{ minX: -4.35, maxX: 4.35, minZ: -2.45, maxZ: 2.45 }}
       obstacles={OBSTACLES}
     >
-      <BarRoom />
+      <BarRoom onInteract={onInteract} />
     </FirstPersonStage>
   );
 }

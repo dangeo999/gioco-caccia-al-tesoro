@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { useGame } from "@/lib/game/store";
 import { sfx } from "@/lib/sfx";
@@ -9,6 +9,8 @@ import Modal from "@/components/ui/Modal";
 import Typewriter from "@/components/ui/Typewriter";
 import MuteButton from "@/components/ui/MuteButton";
 import CodeLock from "@/components/CodeLock";
+import { NEON_WORD, NEON_OFF } from "./bar3d/neonConfig";
+import { BAR_WORLD_ASSETS } from "./bar3d/worldAssets";
 
 // Scene 3D (Three.js): solo lato client per evitare problemi di SSR
 const loading3D = () => (
@@ -26,8 +28,8 @@ const ExteriorBar = dynamic(() => import("./bar3d/ExteriorBar"), {
 });
 
 // ===== Configurazione enigma (Livello 1) =====
-const NEON_WORD = "PORTROYAL"; // l'insegna (senza spazio)
-const NEON_OFF = new Set([1, 5, 7]); // lettere fulminate -> restano 6 accese
+// L'insegna (NEON_WORD / NEON_OFF) vive in bar3d/neonConfig.ts: la condivide con
+// l'insegna 3D di FirstPersonBar, così restano sempre allineate.
 const BOTTLE_COUNT = 7;
 const BOTTLE_FLIPPED = 3; // posizione della bottiglia girata
 const COCKTAILS = [
@@ -70,7 +72,7 @@ const CLUE_ORDER: { id: Hotspot; title: string }[] = [
 ];
 const DIGIT_CLUES: Hotspot[] = ["neon", "bottles", "chalk"];
 
-export default function BarPortRoyal({ onExit }: { onExit: () => void }) {
+export default function BarPortRoyal() {
   const { completeLevel } = useGame();
   const [phase, setPhase] = useState<
     "intro" | "exterior" | "explore" | "win"
@@ -78,6 +80,35 @@ export default function BarPortRoyal({ onExit }: { onExit: () => void }) {
   const [open, setOpen] = useState<Hotspot | null>(null);
   const [notes, setNotes] = useState<Partial<Record<Hotspot, string>>>({});
   const [showNotes, setShowNotes] = useState(false);
+
+  // Precarica il mondo 3D esterno mentre scorre l'intro (~9s): chunk JS della scena
+  // + GLB della strada (pesante) + decodifica Draco. È lavoro impegnativo, quindi lo
+  // schedulo nei MOMENTI DI INATTIVITÀ (requestIdleCallback): così l'animazione
+  // dell'intro resta fluida e il caricamento riempie le pause senza farla scattare.
+  useEffect(() => {
+    let idleId: number | undefined;
+    let timeoutId: number | undefined;
+    const preload = () => {
+      void import("./bar3d/ExteriorBar");
+      const url = BAR_WORLD_ASSETS.exterior.visual?.url;
+      if (url) {
+        import("@react-three/drei")
+          .then((m) => m.useGLTF.preload(url))
+          .catch(() => {});
+      }
+    };
+    if (typeof window.requestIdleCallback === "function") {
+      idleId = window.requestIdleCallback(preload, { timeout: 3000 });
+    } else {
+      timeoutId = window.setTimeout(preload, 1500);
+    }
+    return () => {
+      if (idleId !== undefined && typeof window.cancelIdleCallback === "function") {
+        window.cancelIdleCallback(idleId);
+      }
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
+    };
+  }, []);
 
   // Esame di un oggetto: suono, annotazione nel taccuino, apertura modale.
   function examine(id: Hotspot) {
@@ -161,10 +192,10 @@ export default function BarPortRoyal({ onExit }: { onExit: () => void }) {
             </p>
           </div>
           <button
-            onClick={onExit}
+            onClick={() => setPhase("intro")}
             className="font-pixel text-[11px] py-3 px-5 pixel-border bg-[var(--panel-2)] text-[var(--neon)] active:translate-y-[2px]"
           >
-            TORNA ALLA MAPPA
+            TORNA ALL&apos;INIZIO
           </button>
         </div>
       </Screen>
@@ -176,7 +207,10 @@ export default function BarPortRoyal({ onExit }: { onExit: () => void }) {
     return (
       <Screen>
         <div className="flex-1 flex flex-col fade-in">
-          <ExteriorBar onEnter={() => setPhase("explore")} onExit={onExit} />
+          <ExteriorBar
+            onEnter={() => setPhase("explore")}
+            onExit={() => setPhase("intro")}
+          />
         </div>
       </Screen>
     );
