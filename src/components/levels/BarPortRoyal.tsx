@@ -10,7 +10,10 @@ import Typewriter from "@/components/ui/Typewriter";
 import MuteButton from "@/components/ui/MuteButton";
 import CodeLock from "@/components/CodeLock";
 import { NEON_WORD, NEON_OFF } from "./bar3d/neonConfig";
-import { BAR_WORLD_ASSETS } from "./bar3d/worldAssets";
+import {
+  boostInteriorBar3dPreload,
+  startBar3dPreload,
+} from "./bar3d/preloadBar3d";
 
 // Scene 3D (Three.js): solo lato client per evitare problemi di SSR
 const loading3D = () => (
@@ -81,34 +84,18 @@ export default function BarPortRoyal() {
   const [notes, setNotes] = useState<Partial<Record<Hotspot, string>>>({});
   const [showNotes, setShowNotes] = useState(false);
 
-  // Precarica il mondo 3D esterno mentre scorre l'intro (~9s): chunk JS della scena
-  // + GLB della strada (pesante) + decodifica Draco. È lavoro impegnativo, quindi lo
-  // schedulo nei MOMENTI DI INATTIVITÀ (requestIdleCallback): così l'animazione
-  // dell'intro resta fluida e il caricamento riempie le pause senza farla scattare.
+  // Appena parte il capitolo iniziamo a scaldare il 3D dietro l'intro:
+  // chunk delle scene + GLB esterno e interno. L'esterno parte subito, l'interno
+  // viene messo in coda idle per non rovinare la fluidita' del testo iniziale.
   useEffect(() => {
-    let idleId: number | undefined;
-    let timeoutId: number | undefined;
-    const preload = () => {
-      void import("./bar3d/ExteriorBar");
-      const url = BAR_WORLD_ASSETS.exterior.visual?.url;
-      if (url) {
-        import("@react-three/drei")
-          .then((m) => m.useGLTF.preload(url))
-          .catch(() => {});
-      }
-    };
-    if (typeof window.requestIdleCallback === "function") {
-      idleId = window.requestIdleCallback(preload, { timeout: 3000 });
-    } else {
-      timeoutId = window.setTimeout(preload, 1500);
-    }
-    return () => {
-      if (idleId !== undefined && typeof window.cancelIdleCallback === "function") {
-        window.cancelIdleCallback(idleId);
-      }
-      if (timeoutId !== undefined) clearTimeout(timeoutId);
-    };
+    startBar3dPreload();
   }, []);
+
+  // Quando il giocatore e' gia' fuori dal Port Royal, l'interno diventa la
+  // prossima scena probabile: alziamo la priorita' del suo preload.
+  useEffect(() => {
+    if (phase === "exterior") boostInteriorBar3dPreload();
+  }, [phase]);
 
   // Esame di un oggetto: suono, annotazione nel taccuino, apertura modale.
   function examine(id: Hotspot) {
@@ -126,6 +113,11 @@ export default function BarPortRoyal() {
     sfx.reward();
     completeLevel(1, REWARD_COINS, FRAGMENT, SOLUTION);
     setPhase("win");
+  }
+
+  function enterBar() {
+    boostInteriorBar3dPreload();
+    setPhase("explore");
   }
 
   const digitsFound = DIGIT_CLUES.filter((id) => notes[id]).length;
@@ -208,7 +200,7 @@ export default function BarPortRoyal() {
       <Screen>
         <div className="flex-1 flex flex-col fade-in">
           <ExteriorBar
-            onEnter={() => setPhase("explore")}
+            onEnter={enterBar}
             onExit={() => setPhase("intro")}
           />
         </div>

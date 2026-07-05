@@ -37,6 +37,27 @@ NEXT_PUBLIC_SUPABASE_URL
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
 ```
 
+## 4. Storage modelli 3D
+
+Per non gonfiare i deploy, i GLB pesanti del bar possono stare in Supabase
+Storage o in un CDN pubblico equivalente.
+
+Percorso consigliato nel bucket pubblico `pofi-game`:
+
+```text
+levels/bar/models/02_strada_edifici.glb
+levels/bar/models/04_bar_interno.glb
+```
+
+Su Vercel impostare anche:
+
+```text
+NEXT_PUBLIC_BAR_MODEL_BASE_URL=https://YOUR_PROJECT_REF.supabase.co/storage/v1/object/public/pofi-game/levels/bar/models
+```
+
+La URL non deve terminare con slash. Se la variabile non e' impostata, il gioco
+usa i file locali in `public/levels/bar/models`.
+
 La chiave `SUPABASE_SERVICE_ROLE_KEY`, se verrà usata dalle API admin, deve
 esistere solo nelle variabili server di Vercel. Non va mai committata, mostrata
 nel browser o condivisa in chat.

@@ -1,32 +1,21 @@
-GLB Marble per il livello Port Royal
-====================================
+Modelli runtime del Port Royal
+==============================
 
-Metti qui gli export Marble separati, senza usare Studio Compose.
+Questa cartella deve contenere solo i GLB caricati dal gioco:
 
-Nomi consigliati:
+- 02_strada_edifici.glb
+- 04_bar_interno.glb
 
-- 01_strada_incrocio.glb
-- 02_strada_avanti.glb
-- 03_port_royal_ingresso.glb
-- 04_port_royal_interno.glb
-
-Dopo aver copiato i file, configura posizione, rotazione e scala in:
+Il codice li configura in:
 
 src/components/levels/bar3d/worldAssets.ts
 
-Esempio:
+Per il deploy pubblico e' consigliato spostarli su storage/CDN e impostare:
 
-{
-  id: "strada-01",
-  url: "/levels/bar/models/01_strada_incrocio.glb",
-  position: [0, 0, 0],
-  rotation: [0, 0, 0],
-  scale: 1,
-}
+NEXT_PUBLIC_BAR_MODEL_BASE_URL=https://.../levels/bar/models
 
-Note:
+La URL non deve terminare con slash. Se la variabile non e' impostata, il gioco
+usa il fallback locale /levels/bar/models.
 
-- Non serve che i GLB siano fusi in un unico file.
-- Le giunzioni brutte si nascondono meglio con porte, curve, trigger e hotspot.
-- Se un pezzo e' troppo grande/piccolo, cambia `scale`.
-- Se un pezzo guarda nella direzione sbagliata, cambia `rotation[1]`.
+Gli export sorgente, SPZ, collider e backup non devono stare in public: gonfiano
+il deploy e rischiano di superare i limiti dello hosting.

@@ -1,9 +1,14 @@
+const LOCAL_BAR_MODEL_BASE = "/levels/bar/models";
+const REMOTE_BAR_MODEL_BASE = process.env.NEXT_PUBLIC_BAR_MODEL_BASE_URL?.replace(/\/+$/, "");
+
+function barModelUrl(fileName: string) {
+  return `${REMOTE_BAR_MODEL_BASE || LOCAL_BAR_MODEL_BASE}/${fileName}`;
+}
+
 /** Configurazione unica degli asset 3D del Port Royal.
  *
- * Quando avremo le esportazioni Marble:
- * 1. copiare i GLB in public/levels/bar/models/
- * 2. valorizzare `visual` per esterno e interno
- * 3. regolare scala/posizione senza toccare le meccaniche del livello.
+ * I GLB possono vivere in public/levels/bar/models durante lo sviluppo, oppure
+ * su uno storage esterno impostando NEXT_PUBLIC_BAR_MODEL_BASE_URL.
  */
 export type ScannedAsset = {
   url: string;
@@ -28,7 +33,7 @@ export const BAR_WORLD_ASSETS: {
 } = {
   exterior: {
     visual: {
-      url: "/levels/bar/models/02_strada_edifici.glb",
+      url: barModelUrl("02_strada_edifici.glb"),
       position: [0, 0.3, 0],
       rotation: [0, 0, 0],
       scale: 0.18,
@@ -46,7 +51,7 @@ export const BAR_WORLD_ASSETS: {
     // Con yup nel GLB: X→X, Zalt→Y, -Y→Z. Scala 0.18 → stanza ~9×5×3.2 m.
     // position centra il modello sull'origine (pavimento a y=0); rifinire a occhio.
     visual: {
-      url: "/levels/bar/models/04_bar_interno.glb",
+      url: barModelUrl("04_bar_interno.glb"),
       position: [-6.32, 0, 7.57],
       rotation: [0, 0, 0],
       scale: 0.18,
