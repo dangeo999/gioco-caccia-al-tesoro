@@ -416,17 +416,18 @@ function NightSky() {
 // Batuffolo di fumo irregolare: tanti blob radiali sovrapposti → nuvola soffice
 // dai bordi frastagliati (più credibile di un singolo alone tondo).
 function makeSmokeTexture(): THREE.CanvasTexture {
-  const s = 128;
+  const s = 192;
   const c = document.createElement("canvas");
   c.width = c.height = s;
   const ctx = c.getContext("2d")!;
-  for (let i = 0; i < 26; i++) {
-    const r = s * (0.1 + Math.random() * 0.24);
+  for (let i = 0; i < 38; i++) {
+    const r = s * (0.08 + Math.random() * 0.28);
     const x = s / 2 + (Math.random() - 0.5) * s * 0.52;
     const y = s / 2 + (Math.random() - 0.5) * s * 0.52;
-    const a = 0.05 + Math.random() * 0.1;
+    const a = 0.035 + Math.random() * 0.085;
     const g = ctx.createRadialGradient(x, y, 0, x, y, r);
     g.addColorStop(0, `rgba(255,255,255,${a})`);
+    g.addColorStop(0.48, `rgba(255,255,255,${a * 0.42})`);
     g.addColorStop(1, "rgba(255,255,255,0)");
     ctx.fillStyle = g;
     ctx.beginPath();
@@ -445,35 +446,81 @@ function GapSmoke({
   position,
   width = 4.5,
   height = 5,
+  depth = 1.1,
   count = 46,
+  axis = "x",
+  opacity = 1,
+  minSize = 1.25,
+  maxSize = 3.15,
+  lift = 0.85,
+  minYRatio = 0.12,
+  maxYRatio = 0.32,
 }: {
   position: [number, number, number];
   width?: number;
   height?: number;
+  depth?: number;
   count?: number;
+  axis?: "x" | "z";
+  opacity?: number;
+  minSize?: number;
+  maxSize?: number;
+  lift?: number;
+  minYRatio?: number;
+  maxYRatio?: number;
 }) {
   const tex = useMemo(makeSmokeTexture, []);
   const group = useRef<THREE.Group>(null);
   const puffs = useMemo(
-    () =>
-      Array.from({ length: count }).map(() => {
-        // Densità maggiore in basso: il fumo si posa e si dirada salendo.
-        const yBias = Math.pow(Math.random(), 1.7);
+    () => {
+      const clusterCount = Math.max(1, Math.min(3, Math.round(count / 26)));
+      const yMin = Math.max(0, Math.min(1, minYRatio));
+      const yMax = Math.max(yMin + 0.05, Math.min(1, maxYRatio));
+      const yBand = yMax - yMin;
+      const clusters = Array.from({ length: clusterCount }).map((_, i) => {
+        const t = clusterCount === 1 ? 0.5 : i / (clusterCount - 1);
         return {
-          x0: (Math.random() - 0.5) * width,
-          y0: yBias * height,
-          z0: (Math.random() - 0.5) * 1.6,
-          s: 2.2 + Math.random() * 3.2,
-          phase: Math.random() * Math.PI * 2,
-          bob: 0.25 + Math.random() * 0.4,
-          sway: 0.15 + Math.random() * 0.35,
-          rot: Math.random() * Math.PI * 2,
-          rotSpeed: (Math.random() - 0.5) * 0.12,
-          // più opaco in basso, più tenue in alto
-          peak: 0.28 * (1 - yBias * 0.6),
+          lateral: (t - 0.5) * width + (Math.random() - 0.5) * width * 0.18,
+          inward: (Math.random() - 0.5) * depth * 0.95,
+          y: height * (yMin + Math.random() * yBand),
+          radius: 0.8 + Math.random() * 0.85,
         };
-      }),
-    [count, width, height],
+      });
+
+      return Array.from({ length: count }).map((_, i) => {
+        const cluster = clusters[i % clusterCount];
+        const theta = Math.random() * Math.PI * 2;
+        const r = Math.sqrt(Math.random()) * cluster.radius;
+        const localLateral = cluster.lateral + Math.cos(theta) * width * 0.16 * r;
+        const localInward = cluster.inward + Math.sin(theta) * depth * 0.82 * r;
+        const yScatter = (Math.random() - 0.35) * height * yBand * 0.65 * cluster.radius;
+        const y0 = Math.max(0.05, Math.min(height, cluster.y + yScatter));
+        const altitude = y0 / height;
+        const size = minSize + Math.random() * (maxSize - minSize);
+        const squash = 0.55 + Math.random() * 0.52;
+
+        return {
+          x0: axis === "x" ? localLateral : localInward,
+          y0,
+          z0: axis === "z" ? localLateral : localInward,
+          sx: size * (0.95 + Math.random() * 0.58),
+          sy: size * squash,
+          phase: Math.random() * Math.PI * 2,
+          life: Math.random(),
+          rise: 0.018 + Math.random() * 0.034,
+          lift: lift * (0.65 + Math.random() * 0.7),
+          bob: 0.1 + Math.random() * 0.2,
+          sway: 0.12 + Math.random() * 0.34,
+          drift: 0.1 + Math.random() * 0.28,
+          breathe: 0.035 + Math.random() * 0.08,
+          rot: Math.random() * Math.PI * 2,
+          rotSpeed: (Math.random() - 0.5) * 0.05,
+          peak: (0.18 + Math.random() * 0.12) * opacity * (1 - altitude * 0.24),
+          color: Math.random() > 0.42 ? "#c1c5d0" : "#9ea4b0",
+        };
+      });
+    },
+    [axis, count, depth, height, lift, maxSize, maxYRatio, minSize, minYRatio, opacity, width],
   );
   useFrame((st) => {
     const g = group.current;
@@ -481,29 +528,69 @@ function GapSmoke({
     const t = st.clock.elapsedTime;
     g.children.forEach((ch, i) => {
       const pf = puffs[i];
-      ch.position.y = pf.y0 + Math.sin(t * 0.2 + pf.phase) * pf.bob;
-      ch.position.x = pf.x0 + Math.sin(t * 0.12 + pf.phase) * pf.sway;
+      const life = (pf.life + t * pf.rise) % 1;
+      const fade = Math.sin(life * Math.PI);
+      const breathe = 1 + Math.sin(t * 0.55 + pf.phase) * pf.breathe;
+      ch.position.y =
+        pf.y0 +
+        life * pf.lift +
+        Math.sin(t * 0.2 + pf.phase) * pf.bob;
+      if (axis === "x") {
+        ch.position.x = pf.x0 + Math.sin(t * 0.16 + pf.phase) * pf.sway;
+        ch.position.z = pf.z0 + Math.cos(t * 0.13 + pf.phase) * pf.drift;
+      } else {
+        ch.position.z = pf.z0 + Math.sin(t * 0.16 + pf.phase) * pf.sway;
+        ch.position.x = pf.x0 + Math.cos(t * 0.13 + pf.phase) * pf.drift;
+      }
+      ch.scale.set(pf.sx * breathe * (0.92 + life * 0.22), pf.sy * breathe * (0.96 + life * 0.32), 1);
       const m = (ch as THREE.Sprite).material as THREE.SpriteMaterial;
       m.rotation = pf.rot + t * pf.rotSpeed;
-      m.opacity = pf.peak * (0.55 + 0.45 * Math.sin(t * 0.25 + pf.phase));
+      m.opacity = pf.peak * (0.26 + fade * 0.74) * (0.86 + 0.14 * Math.sin(t * 0.38 + pf.phase));
     });
   });
   return (
     <group ref={group} position={position}>
       {puffs.map((pf, i) => (
-        <sprite key={i} position={[pf.x0, pf.y0, pf.z0]} scale={[pf.s, pf.s, 1]}>
+        <sprite key={i} position={[pf.x0, pf.y0, pf.z0]} scale={[pf.sx, pf.sy, 1]}>
           <spriteMaterial
             map={tex}
             transparent
             depthWrite={false}
             opacity={pf.peak}
-            color="#b3b7c6"
+            color={pf.color}
             fog={false}
             toneMapped={false}
           />
         </sprite>
       ))}
     </group>
+  );
+}
+
+function BackdropSmokeClouds() {
+  return (
+    <>
+      {/* Strato alto: dietro le lastre, sale sopra i palazzi senza invadere la strada. */}
+      <GapSmoke position={[-6.6, 0.18, -4.1]} width={3.2} height={8.8} depth={0.58} count={36} opacity={0.62} minSize={1.45} maxSize={3.4} lift={0.95} minYRatio={0.38} maxYRatio={0.98} />
+      <GapSmoke position={[3.8, 0.18, -4.2]} width={3.0} height={8.4} depth={0.52} count={32} opacity={0.55} minSize={1.35} maxSize={3.15} lift={0.88} minYRatio={0.42} maxYRatio={0.98} />
+      <GapSmoke position={[-6.9, 0.18, 4.28]} width={3.6} height={8.6} depth={0.58} count={38} opacity={0.6} minSize={1.4} maxSize={3.35} lift={0.92} minYRatio={0.4} maxYRatio={0.98} />
+      <GapSmoke position={[3.5, 0.18, 4.34]} width={3.25} height={8.2} depth={0.55} count={32} opacity={0.54} minSize={1.35} maxSize={3.1} lift={0.86} minYRatio={0.44} maxYRatio={0.98} />
+      <GapSmoke position={[12.35, 0.18, 4.95]} width={3.9} height={8.7} depth={0.6} count={36} opacity={0.58} minSize={1.35} maxSize={3.25} lift={0.9} minYRatio={0.4} maxYRatio={0.98} />
+      <GapSmoke position={[11.6, 0.18, -5.05]} width={3.7} height={8.5} depth={0.58} count={34} opacity={0.56} minSize={1.35} maxSize={3.2} lift={0.88} minYRatio={0.42} maxYRatio={0.98} />
+      <GapSmoke position={[-14.75, 0.16, 0.6]} axis="z" width={4.2} height={8.1} depth={0.42} count={28} opacity={0.44} minSize={1.25} maxSize={2.9} lift={0.76} minYRatio={0.48} maxYRatio={0.98} />
+      <GapSmoke position={[15.25, 0.16, 0.8]} axis="z" width={4.4} height={8.6} depth={0.44} count={30} opacity={0.5} minSize={1.3} maxSize={3.0} lift={0.82} minYRatio={0.46} maxYRatio={0.98} />
+
+      {/* Strato basso: solo un velo arretrato nei varchi, cosi dalla strada arriva meno. */}
+      <GapSmoke position={[-6.7, 0.28, -3.35]} width={2.25} height={2.1} depth={0.62} count={24} opacity={0.55} maxSize={2.45} lift={0.5} />
+      <GapSmoke position={[-3.2, 0.24, -3.42]} width={1.8} height={1.9} depth={0.55} count={16} opacity={0.4} maxSize={2.15} lift={0.44} />
+      <GapSmoke position={[3.6, 0.26, -3.36]} width={2.45} height={2.25} depth={0.62} count={24} opacity={0.58} maxSize={2.5} lift={0.52} />
+      <GapSmoke position={[-6.8, 0.28, 3.78]} width={2.8} height={2.25} depth={0.62} count={26} opacity={0.56} maxSize={2.55} lift={0.52} />
+      <GapSmoke position={[3.1, 0.28, 3.82]} width={2.65} height={2.2} depth={0.6} count={22} opacity={0.52} maxSize={2.45} lift={0.5} />
+      <GapSmoke position={[11.95, 0.28, 4.55]} width={3.2} height={2.4} depth={0.65} count={26} opacity={0.58} maxSize={2.65} lift={0.55} />
+      <GapSmoke position={[11.25, 0.28, -4.75]} width={3.2} height={2.35} depth={0.65} count={24} opacity={0.56} maxSize={2.6} lift={0.54} />
+      <GapSmoke position={[-14.55, 0.2, 0.4]} axis="z" width={2.7} height={1.55} depth={0.45} count={12} opacity={0.24} maxSize={1.95} lift={0.34} />
+      <GapSmoke position={[15.05, 0.22, 0.6]} axis="z" width={3.1} height={2.0} depth={0.5} count={18} opacity={0.38} maxSize={2.2} lift={0.42} />
+    </>
   );
 }
 
@@ -560,8 +647,7 @@ function OpenStreet({ onEnter }: { onEnter: () => void }) {
       {scanned && (
         <>
           <ScannedWorld asset={scanned} emissiveBoost={0.22} clipBackdropY={8} softBackdrop />
-          {/* Fumo che copre il varco tra i palazzi a sud (ex "buco di mappa"). */}
-          <GapSmoke position={[-6.5, 0.3, -2.5]} width={4} height={4.5} />
+          <BackdropSmokeClouds />
           <UpperStreetHoleCap />
           {BAR_WORLD_ASSETS.exterior.entryPoint && (
             <Obj
