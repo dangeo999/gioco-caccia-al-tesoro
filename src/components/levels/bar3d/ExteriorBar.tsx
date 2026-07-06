@@ -703,7 +703,6 @@ export default function ExteriorBar({
   return (
     <FirstPersonStage
       onExit={onExit}
-      sceneName="exterior"
       hint="Esplora Via Roma · trova la porta blu del Port Royal"
       startPos={[-12.5, 1.3, 0.2]}
       startYaw={-Math.PI / 2}

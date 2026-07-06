@@ -98,6 +98,16 @@ export function boostInteriorBar3dPreload() {
   preloadInteriorBar3d();
 }
 
+/** Pre-SCARICA solo il file del modello interno nella cache del browser (link
+ *  preload), SENZA parsarlo/caricarlo in GPU. Così, quando si entra nel bar, il
+ *  file è già scaricato e l'ingresso è quasi istantaneo — ma durante la strada
+ *  NON teniamo due scene pesanti in memoria insieme (era la causa dei crash su
+ *  iPhone). Il parse/upload avviene solo al momento dell'ingresso. */
+export function prefetchInteriorModel() {
+  const url = MODEL_URLS.interior;
+  if (url) addModelHint(url, "low");
+}
+
 export function startBar3dPreload() {
   if (fullPreloadStarted) return;
   fullPreloadStarted = true;

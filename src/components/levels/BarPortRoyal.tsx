@@ -12,6 +12,7 @@ import CodeLock from "@/components/CodeLock";
 import { NEON_WORD, NEON_OFF } from "./bar3d/neonConfig";
 import {
   boostInteriorBar3dPreload,
+  prefetchInteriorModel,
   startBar3dPreload,
 } from "./bar3d/preloadBar3d";
 
@@ -91,10 +92,13 @@ export default function BarPortRoyal() {
     startBar3dPreload();
   }, []);
 
-  // NB: NON precarichiamo il modello interno mentre si e' fuori. Su mobile
-  // terrebbe strada + bar in memoria insieme (causa dei crash su iPhone). Il
-  // modello interno si carica al momento dell'ingresso vero (vedi enterBar),
-  // quando la scena esterna viene liberata dalla GPU.
+  // Mentre si e' fuori, pre-SCARICHIAMO solo il file dell'interno (in cache,
+  // senza caricarlo in GPU): entrare nel bar diventa quasi istantaneo. NON lo
+  // teniamo in memoria come scena, cosi' non si sommano strada + bar (era la
+  // causa dei crash su iPhone). Il parse/upload avviene solo entrando.
+  useEffect(() => {
+    if (phase === "exterior") prefetchInteriorModel();
+  }, [phase]);
 
   // Esame di un oggetto: suono, annotazione nel taccuino, apertura modale.
   function examine(id: Hotspot) {

@@ -17,7 +17,6 @@ import {
 } from "react";
 import * as THREE from "three";
 import Joystick from "@/components/Joystick";
-import DebugTelemetry from "./DebugTelemetry";
 
 // Vettori temporanei riusati nel loop (niente allocazioni per frame)
 const _dir = new THREE.Vector3();
@@ -316,7 +315,6 @@ export default function FirstPersonStage({
   obstacles = [],
   exitLabel = "‹ esci",
   debug = false,
-  sceneName = "scene",
 }: {
   children: ReactNode;
   onExit: () => void;
@@ -327,7 +325,6 @@ export default function FirstPersonStage({
   obstacles?: Obstacle[];
   exitLabel?: string;
   debug?: boolean;
-  sceneName?: string;
 }) {
   const moveRef = useRef({ x: 0, y: 0 });
   const keysRef = useRef({ x: 0, y: 0 });
@@ -458,7 +455,6 @@ export default function FirstPersonStage({
           sprintRef={sprintRef}
         />
         {debug && <DebugProbe lookRef={lookRef} onDebugFrame={setDebugFrame} />}
-        <DebugTelemetry scene={sceneName} />
         <EffectComposer multisampling={0}>
           <Pixelation granularity={3} />
         </EffectComposer>
