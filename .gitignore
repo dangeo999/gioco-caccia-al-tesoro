@@ -48,4 +48,5 @@ next-env.d.ts
 # large local backups / references (not shipped)
 /reference/
 public/levels/bar/models/_backup_pre_export/
+_backup-models-original/
 /maschera.png

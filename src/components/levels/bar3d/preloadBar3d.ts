@@ -102,8 +102,13 @@ export function startBar3dPreload() {
   if (fullPreloadStarted) return;
   fullPreloadStarted = true;
 
-  // L'esterno serve per primo, quindi parte subito. L'interno e' il peso che si
-  // sente entrando nel bar: lo mettiamo in coda appena il browser respira.
+  // L'esterno serve per primo, quindi parte subito. Del MODELLO interno NON
+  // facciamo il preload qui: su mobile terrebbe due scansioni pesanti in
+  // memoria contemporaneamente (strada + bar) e contribuisce ai crash su
+  // iPhone. Scaldiamo solo il chunk JS della scena interna (leggero); il
+  // modello vero si carica quando si entra davvero nel bar (vedi enterBar).
   preloadExteriorBar3d();
-  scheduleSoon(preloadInteriorBar3d);
+  scheduleSoon(() => {
+    void preloadComponent("interior");
+  });
 }

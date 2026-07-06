@@ -91,11 +91,10 @@ export default function BarPortRoyal() {
     startBar3dPreload();
   }, []);
 
-  // Quando il giocatore e' gia' fuori dal Port Royal, l'interno diventa la
-  // prossima scena probabile: alziamo la priorita' del suo preload.
-  useEffect(() => {
-    if (phase === "exterior") boostInteriorBar3dPreload();
-  }, [phase]);
+  // NB: NON precarichiamo il modello interno mentre si e' fuori. Su mobile
+  // terrebbe strada + bar in memoria insieme (causa dei crash su iPhone). Il
+  // modello interno si carica al momento dell'ingresso vero (vedi enterBar),
+  // quando la scena esterna viene liberata dalla GPU.
 
   // Esame di un oggetto: suono, annotazione nel taccuino, apertura modale.
   function examine(id: Hotspot) {

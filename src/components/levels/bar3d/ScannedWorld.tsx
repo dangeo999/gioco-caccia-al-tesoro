@@ -97,6 +97,33 @@ export default function ScannedWorld({
     });
   }, [clone, emissiveBoost, clipBackdropY, softBackdrop, gl]);
 
+  // Alla smontata (cambio scena) libera geometria e texture dalla GPU e svuota
+  // la cache del GLB. Senza questo ogni scena visitata resta residente e su
+  // iPhone la memoria si somma fino al crash (strada + bar insieme). Costo
+  // visivo nullo: la prossima volta che serve, il modello si ricarica.
+  useEffect(() => {
+    return () => {
+      clone.traverse((node) => {
+        const mesh = node as THREE.Mesh;
+        if (!("isMesh" in node) || !(node as THREE.Mesh).isMesh) return;
+        mesh.geometry?.dispose();
+        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        for (const mat of mats) {
+          if (!mat) continue;
+          const sm = mat as THREE.MeshStandardMaterial;
+          sm.map?.dispose();
+          sm.emissiveMap?.dispose();
+          sm.normalMap?.dispose();
+          sm.roughnessMap?.dispose();
+          sm.metalnessMap?.dispose();
+          sm.aoMap?.dispose();
+          mat.dispose();
+        }
+      });
+      useGLTF.clear(asset.url);
+    };
+  }, [clone, asset.url]);
+
   const scale = typeof asset.scale === "number"
     ? [asset.scale, asset.scale, asset.scale] as [number, number, number]
     : asset.scale ?? [1, 1, 1];

@@ -488,6 +488,7 @@ export default function FirstPersonBar({
   return (
     <FirstPersonStage
       onExit={onExit}
+      sceneName="interior"
       exitLabel="‹ torna fuori"
       hint="Cerca gli indizi · avvicinati e tocca USA"
       startPos={[0, 1.5, 1.9]}

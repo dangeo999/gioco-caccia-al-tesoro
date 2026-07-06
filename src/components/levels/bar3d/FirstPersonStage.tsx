@@ -17,6 +17,7 @@ import {
 } from "react";
 import * as THREE from "three";
 import Joystick from "@/components/Joystick";
+import DebugTelemetry from "./DebugTelemetry";
 
 // Vettori temporanei riusati nel loop (niente allocazioni per frame)
 const _dir = new THREE.Vector3();
@@ -315,6 +316,7 @@ export default function FirstPersonStage({
   obstacles = [],
   exitLabel = "‹ esci",
   debug = false,
+  sceneName = "scene",
 }: {
   children: ReactNode;
   onExit: () => void;
@@ -325,6 +327,7 @@ export default function FirstPersonStage({
   obstacles?: Obstacle[];
   exitLabel?: string;
   debug?: boolean;
+  sceneName?: string;
 }) {
   const moveRef = useRef({ x: 0, y: 0 });
   const keysRef = useRef({ x: 0, y: 0 });
@@ -338,6 +341,18 @@ export default function FirstPersonStage({
   const [activeId, setActiveId] = useState<string | null>(null);
   const [hasLooked, setHasLooked] = useState(false);
   const [debugFrame, setDebugFrame] = useState<DebugFrame | null>(null);
+
+  // Su iOS forziamo dpr=1: il framebuffer scala col quadrato del dpr, quindi
+  // passare da 1.25 a 1 libera ~35% di memoria video con impatto visivo
+  // impercettibile (la resa è già "pixelata" dal post-processing).
+  const dpr = useMemo<number | [number, number]>(() => {
+    if (typeof navigator === "undefined") return [1, 1.25];
+    const ua = navigator.userAgent;
+    const isIOS =
+      /iP(hone|ad|od)/.test(ua) ||
+      (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+    return isIOS ? 1 : [1, 1.25];
+  }, []);
 
   const register = useCallback((id: string, target: InteractiveTarget) => {
     registryRef.current.set(id, target);
@@ -416,7 +431,7 @@ export default function FirstPersonStage({
     <div className="relative flex-1 pixel-border overflow-hidden touch-none select-none">
       <Canvas
         shadows="soft"
-        dpr={[1, 1.25]}
+        dpr={dpr}
         gl={{ antialias: false }}
         camera={{ fov: 82, near: 0.1, far: 100 }}
       >
@@ -443,6 +458,7 @@ export default function FirstPersonStage({
           sprintRef={sprintRef}
         />
         {debug && <DebugProbe lookRef={lookRef} onDebugFrame={setDebugFrame} />}
+        <DebugTelemetry scene={sceneName} />
         <EffectComposer multisampling={0}>
           <Pixelation granularity={3} />
         </EffectComposer>
